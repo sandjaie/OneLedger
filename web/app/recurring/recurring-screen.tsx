@@ -2,14 +2,18 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { MoreHorizontalIcon } from "lucide-react";
 
 import { ConfirmAction } from "@/app/ui/confirm-action";
+import { ConsolePageHeader } from "@/app/ui/console-page-header";
+import { DataTableRegion } from "@/app/ui/data-table-region";
+import { DataToolbar } from "@/app/ui/data-toolbar";
+import { MetricStrip } from "@/app/ui/metric-strip";
 import { RowActions } from "@/app/ui/row-actions";
 import { SectionNav } from "@/app/ui/section-nav";
+import { StatusLabel } from "@/app/ui/status-label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
@@ -264,12 +268,139 @@ export function RecurringScreen({ currencies, request }: Props) {
     }
   }
 
+  function statusTone(row: RecurringSeriesRow) {
+    return row.status === "overdue" ? "danger" : row.status === "ended" ? "neutral" : "success";
+  }
+
+  function paymentRow(row: RecurringSeriesRow) {
+    return (
+      <tr key={row.id}>
+        <th scope="row">
+          <div className="console-entity">
+            <span aria-hidden="true" className="console-entity-mark">REC</span>
+            <div>
+              <span className="console-entity-title">{row.label}</span>
+              <span className="console-entity-sub">{row.categoryName ?? "Not categorised"}</span>
+              <Collapsible className="recurring-record-review">
+                <CollapsibleTrigger>Review {row.label}</CollapsibleTrigger>
+                <CollapsibleContent>
+                  <dl>
+                    <div><dt>Last seen</dt><dd>{row.lastSeenOn}</dd></div>
+                    <div><dt>Evidence</dt><dd>{row.detectionMethod === "detected" ? "Detected from ledger charges" : row.detectionMethod}</dd></div>
+                    <div><dt>Periods seen</dt><dd>{row.periodCount}</dd></div>
+                    {row.resumed && <div><dt>History</dt><dd>Resumed</dd></div>}
+                    {row.priceChangedFrom && row.priceChangedOn && row.nativeAmount !== null && row.nativeCurrency !== null &&
+                      <div><dt>Price change</dt><dd>From {moneyText(row.priceChangedFrom, row.nativeCurrency, currencies)} to {moneyText(row.nativeAmount, row.nativeCurrency, currencies)} on {row.priceChangedOn}</dd></div>}
+                  </dl>
+                </CollapsibleContent>
+              </Collapsible>
+            </div>
+          </div>
+        </th>
+        <td>{CADENCE_TEXT[row.cadence] ?? row.cadence}</td>
+        <td className="recurring-payment-source">
+          {row.payingAccountName
+            ? `${row.payingAccountName}${row.payingAccountMasked ? ` (${row.payingAccountMasked})` : ""}`
+            : "Not recorded"}
+          {row.paymentChannelName && <span>{row.paymentChannelName}</span>}
+        </td>
+        <td><div className="recurring-status-stack">
+          <StatusLabel tone={statusTone(row)}>{STATUS_TEXT[row.status] ?? row.status}</StatusLabel>
+          {row.needsName && <StatusLabel tone="attention">Needs a name</StatusLabel>}
+        </div></td>
+        <td className="recurring-record-date">
+          {row.status === "ended"
+            ? `ended ${row.lastPeriodEndedOn ?? row.lastSeenOn}${row.lastEndReason ? ` (${END_REASON_TEXT[row.lastEndReason] ?? row.lastEndReason})` : ""}`
+            : row.nextExpectedOn
+              ? `${row.nextExpectedOn < todayLocalIso() || row.status === "overdue" ? "Overdue" : "Next expected"} ${row.nextExpectedOn}`
+              : `Last seen ${row.lastSeenOn}`}
+        </td>
+        <td className="console-number recurring-record-amount">
+          {row.nativeAmount !== null && row.nativeCurrency !== null
+            ? moneyText(row.nativeAmount, row.nativeCurrency, currencies)
+            : "Amount appears after the next refresh"}
+        </td>
+        <td className="console-row-actions">
+          <RowActions
+            floating
+            label={`Manage ${row.label}`}
+            triggerContent={<MoreHorizontalIcon aria-hidden="true" />}
+          >
+            <div className="plans-settlement-actions">
+              <Button disabled={flipBusy === row.id} onClick={() => void flip(row)} type="button" variant="outline">
+                {flipBusy === row.id ? "Saving…" : row.isSubscription ? "Not a subscription" : "A subscription"}
+              </Button>
+              {renamingId !== row.id && <Button onClick={() => startRename(row)} type="button" variant="outline">Rename</Button>}
+              {row.isCurrent && <NativeSelect aria-label="Status" disabled={statusBusy === row.id}
+                onChange={(e) => void setStatus(row, e.target.value)} value={row.lifecycle}>
+                <NativeSelectOption value="active">Active</NativeSelectOption>
+                <NativeSelectOption value="trial">Trial</NativeSelectOption>
+                <NativeSelectOption value="paused">Paused</NativeSelectOption>
+              </NativeSelect>}
+              {cadenceEditingId !== row.id && <Button onClick={() => startCadence(row)} type="button" variant="outline">Cadence</Button>}
+              {row.isCurrent ? (
+                <ConfirmAction actionLabel="Confirm cancel" busy={cancelBusy === row.id}
+                  message={`Cancel ${row.label}? This closes its current billing period.`}
+                  onConfirm={() => cancel(row)} title="Cancel recurring payment" triggerLabel="Cancel" />
+              ) : (
+                <Button disabled={resumeBusy === row.id} onClick={() => void resume(row)} type="button" variant="outline">
+                  {resumeBusy === row.id ? "Resuming…" : "Resume"}
+                </Button>
+              )}
+              <ConfirmAction actionLabel="Confirm remove" busy={removeBusy === row.id}
+                message={`Remove ${row.label}? This is not "not a subscription" — it stops tracking this payment, and it will not come back on its own.`}
+                onConfirm={() => remove(row)} title="Remove recurring payment" triggerLabel="Remove" />
+            </div>
+
+            {cadenceEditingId === row.id && (
+              <div className="recurring-dismiss-form">
+                <label className="recurring-edit-field">
+                  <span>Cadence</span>
+                  <NativeSelect onChange={(e) => setCadenceValue(e.target.value)} value={cadenceValue}>
+                    {Object.entries(CADENCE_TEXT).map(([value, text]) => (
+                      <NativeSelectOption key={value} value={value}>{text}</NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </label>
+                {cadenceValue === "custom" && <label className="recurring-edit-field">
+                  <span>Days between charges</span>
+                  <Input max={730} min={7} onChange={(e) => setCustomIntervalValue(e.target.valueAsNumber)}
+                    type="number" value={customIntervalValue ?? ""} />
+                </label>}
+                {cadenceProblem && <Alert variant="destructive"><AlertDescription>{cadenceProblem}</AlertDescription></Alert>}
+                <Button disabled={cadenceBusy || (cadenceValue === "custom" &&
+                  (customIntervalValue === null || Number.isNaN(customIntervalValue)))}
+                  onClick={() => void submitCadence(row.id)} type="button">
+                  {cadenceBusy ? "Saving…" : "Save cadence"}
+                </Button>
+                <Button onClick={() => setCadenceEditingId(undefined)} type="button" variant="ghost">Cancel</Button>
+              </div>
+            )}
+
+            {renamingId === row.id && <div className="recurring-dismiss-form">
+              <label className="recurring-edit-field"><span>Label</span>
+                <Input onChange={(e) => setRenameValue(e.target.value)} value={renameValue} />
+              </label>
+              {renameProblem && <Alert variant="destructive"><AlertDescription>{renameProblem}</AlertDescription></Alert>}
+              <Button disabled={renameBusy || !renameValue.trim()} onClick={() => void submitRename(row.id)} type="button">
+                {renameBusy ? "Saving…" : "Save name"}
+              </Button>
+              <Button onClick={() => setRenamingId(undefined)} type="button" variant="ghost">Cancel</Button>
+            </div>}
+          </RowActions>
+        </td>
+      </tr>
+    );
+  }
+
   return (
     <section className="workspace-content recurring-screen" aria-labelledby="recurring-title">
-      <header className="page-head">
-        <p className="eyebrow">Regular outgoings</p>
-        <h1 className="workspace-title" id="recurring-title">Recurring payments</h1>
-      </header>
+      <div id="recurring-title">
+        <ConsolePageHeader
+          description="Regular outgoings with cadence, payment source and lifecycle kept visible."
+          title="Recurring payments"
+        />
+      </div>
       <Collapsible className="experience-disclosure">
         <CollapsibleTrigger>How this list works</CollapsibleTrigger>
         <CollapsibleContent><p>Nothing here needs confirming. Mark a payment as a <Link href="/subscriptions">subscription</Link> to move it there. Remove hides it from this list permanently.</p></CollapsibleContent>
@@ -288,199 +419,52 @@ export function RecurringScreen({ currencies, request }: Props) {
             <Alert key={message} variant="destructive"><AlertDescription>{message}</AlertDescription></Alert>
           ))}
 
-          <section aria-label="Next payment" className="recurring-next">
-            <Card>
-              <CardHeader><CardTitle>Next payment</CardTitle></CardHeader>
-              <CardContent>
-                {next ? <div className="recurring-next-facts">
-                  <strong>{next.label}</strong>
-                  <span>{next.nativeAmount !== null && next.nativeCurrency !== null
-                    ? moneyText(next.nativeAmount, next.nativeCurrency, currencies)
-                    : "Amount appears after the next refresh"} · {CADENCE_TEXT[next.cadence] ?? next.cadence}</span>
-                  <span>{next.nextExpectedOn! < todayLocalIso() || next.status === "overdue" ? "Overdue" : "Expected"} {next.nextExpectedOn}</span>
-                </div> : <p>{shown.length === 0
-                  ? "No recurring payment other than a subscription has been found yet."
-                  : "No next date is available for an active recurring payment."}</p>}
-              </CardContent>
-            </Card>
+          <section aria-label="Next payment" className="recurring-next console-lead">
+            <div>
+              <span>Next payment</span>
+              {next ? <><strong>{next.label}</strong><time dateTime={next.nextExpectedOn!}>{next.nextExpectedOn}</time></> : <strong>{shown.length === 0
+                ? "No recurring payment other than a subscription has been found yet."
+                : "No next date is available for an active recurring payment."}</strong>}
+            </div>
+            {next && <div className="console-lead-facts">
+              <strong>{next.nativeAmount !== null && next.nativeCurrency !== null
+                ? moneyText(next.nativeAmount, next.nativeCurrency, currencies)
+                : "Amount appears after the next refresh"}</strong>
+              <span>{CADENCE_TEXT[next.cadence] ?? next.cadence}</span>
+              <StatusLabel tone={next.nextExpectedOn! < todayLocalIso() || next.status === "overdue" ? "danger" : "success"}>
+                {next.nextExpectedOn! < todayLocalIso() || next.status === "overdue" ? "Overdue" : "Expected"} {next.nextExpectedOn}
+              </StatusLabel>
+            </div>}
           </section>
 
-          {shown.length > 0 && <SectionNav activeId={view} items={[
-            { id: "active", label: "Active" }, { id: "ended", label: "Ended" },
-          ]} onSelect={(id) => setView(id as View)} />}
+          <MetricStrip label="Recurring payment totals" items={[
+            { label: "Active", value: String(active.length), detail: "Non-subscription series" },
+            { label: "Ended", value: String(ended.length), detail: "History retained" },
+            { label: "Needs a name", value: String(shown.filter((row) => row.needsName).length), detail: "Owner review" },
+          ]} />
+
+          {shown.length > 0 && <DataToolbar
+            label="Recurring lifecycle views"
+            summary={`${shown.length} ${shown.length === 1 ? "payment" : "payments"}`}
+          ><SectionNav activeId={view} items={[
+              { id: "active", label: "Active" }, { id: "ended", label: "Ended" },
+            ]} onSelect={(id) => setView(id as View)} /></DataToolbar>}
 
           {shown.length > 0 && <section className="recurring-view" aria-label={`${view === "active" ? "Active" : "Ended"} payments`}>
+            <div className="console-section-head">
+              <h2>{view === "active" ? "Active payments" : "Ended payments"}</h2>
+              <span>{view === "active" ? "Cadence and next date" : "Lifecycle history"}</span>
+            </div>
             {(view === "active" ? active : ended).length === 0 && <p>
               {view === "active" ? "No active recurring payment is recorded." : "No ended recurring payment is recorded."}
             </p>}
             {(view === "active" ? active : ended).length > 0 && (
-            <ul className="recurring-confirmed-list">
-              {(view === "active" ? active : ended).map((row) => (
-                <li className="record-row recurring-record" key={row.id}>
-                  <div className="recurring-record-head">
-                    <strong>{row.label}</strong>
-                    <Badge variant={row.status === "overdue" ? "destructive" : "secondary"}>
-                      {STATUS_TEXT[row.status] ?? row.status}
-                    </Badge>
-                    {row.needsName && <Badge variant="outline">Needs a name</Badge>}
-                  </div>
-                  <strong className="recurring-record-amount">
-                    {row.nativeAmount !== null && row.nativeCurrency !== null
-                      ? moneyText(row.nativeAmount, row.nativeCurrency, currencies)
-                      : "Amount appears after the next refresh"} · {CADENCE_TEXT[row.cadence] ?? row.cadence}
-                  </strong>
-                  <span className="recurring-record-date">
-                    {row.status === "ended"
-                      ? `ended ${row.lastPeriodEndedOn ?? row.lastSeenOn}${row.lastEndReason ? ` (${END_REASON_TEXT[row.lastEndReason] ?? row.lastEndReason})` : ""}`
-                      : row.nextExpectedOn
-                        ? `${row.nextExpectedOn < todayLocalIso() || row.status === "overdue" ? "Overdue" : "Next expected"} ${row.nextExpectedOn}`
-                        : `Last seen ${row.lastSeenOn}`}
-                  </span>
-                  <Collapsible className="recurring-record-review">
-                    <CollapsibleTrigger>Review {row.label}</CollapsibleTrigger>
-                    <CollapsibleContent>
-                      <dl>
-                        <div><dt>Category</dt><dd>{row.categoryName ?? "Not categorised"}</dd></div>
-                        <div><dt>Last seen</dt><dd>{row.lastSeenOn}</dd></div>
-                        <div><dt>Payment source</dt><dd>{row.payingAccountName
-                          ? `${row.payingAccountName}${row.payingAccountMasked ? ` (${row.payingAccountMasked})` : ""}`
-                          : "Not recorded"}</dd></div>
-                        <div><dt>Channel</dt><dd>{row.paymentChannelName ?? "Not recorded"}</dd></div>
-                        <div><dt>Evidence</dt><dd>{row.detectionMethod === "detected" ? "Detected from ledger charges" : row.detectionMethod}</dd></div>
-                        <div><dt>Periods seen</dt><dd>{row.periodCount}</dd></div>
-                        {row.resumed && <div><dt>History</dt><dd>Resumed</dd></div>}
-                        {row.priceChangedFrom && row.priceChangedOn && row.nativeAmount !== null && row.nativeCurrency !== null &&
-                          <div><dt>Price change</dt><dd>From {moneyText(row.priceChangedFrom, row.nativeCurrency, currencies)} to {moneyText(row.nativeAmount, row.nativeCurrency, currencies)} on {row.priceChangedOn}</dd></div>}
-                      </dl>
-                    </CollapsibleContent>
-                  </Collapsible>
-
-                  <RowActions label={`Manage ${row.label}`}>
-                  <div className="plans-settlement-actions">
-                    <Button
-                      disabled={flipBusy === row.id}
-                      onClick={() => void flip(row)}
-                      type="button"
-                      variant="outline"
-                    >
-                      {flipBusy === row.id
-                        ? "Saving…"
-                        : row.isSubscription
-                          ? "Not a subscription"
-                          : "A subscription"}
-                    </Button>
-                    {renamingId !== row.id && (
-                      <Button onClick={() => startRename(row)} type="button" variant="outline">
-                        Rename
-                      </Button>
-                    )}
-                    {row.isCurrent && <NativeSelect
-                      aria-label="Status"
-                      disabled={statusBusy === row.id}
-                      onChange={(e) => void setStatus(row, e.target.value)}
-                      value={row.lifecycle}
-                    >
-                      <NativeSelectOption value="active">Active</NativeSelectOption>
-                      <NativeSelectOption value="trial">Trial</NativeSelectOption>
-                      <NativeSelectOption value="paused">Paused</NativeSelectOption>
-                    </NativeSelect>}
-                    {cadenceEditingId !== row.id && (
-                      <Button onClick={() => startCadence(row)} type="button" variant="outline">
-                        Cadence
-                      </Button>
-                    )}
-                    {row.isCurrent ? (
-                      <ConfirmAction actionLabel="Confirm cancel" busy={cancelBusy === row.id}
-                        message={`Cancel ${row.label}? This closes its current billing period.`}
-                        onConfirm={() => cancel(row)} title="Cancel recurring payment" triggerLabel="Cancel" />
-                    ) : (
-                      <Button
-                        disabled={resumeBusy === row.id}
-                        onClick={() => void resume(row)}
-                        type="button"
-                        variant="outline"
-                      >
-                        {resumeBusy === row.id ? "Resuming…" : "Resume"}
-                      </Button>
-                    )}
-                    <ConfirmAction actionLabel="Confirm remove" busy={removeBusy === row.id}
-                      message={`Remove ${row.label}? This is not "not a subscription" — it stops tracking this payment, and it will not come back on its own.`}
-                      onConfirm={() => remove(row)} title="Remove recurring payment" triggerLabel="Remove" />
-                  </div>
-
-                  {cadenceEditingId === row.id && (
-                    <div className="recurring-dismiss-form">
-                      <label className="recurring-edit-field">
-                        <span>Cadence</span>
-                        <NativeSelect
-                          onChange={(e) => setCadenceValue(e.target.value)}
-                          value={cadenceValue}
-                        >
-                          <NativeSelectOption value="weekly">Weekly</NativeSelectOption>
-                          <NativeSelectOption value="monthly">Monthly</NativeSelectOption>
-                          <NativeSelectOption value="quarterly">Quarterly</NativeSelectOption>
-                          <NativeSelectOption value="semiannual">Semiannual</NativeSelectOption>
-                          <NativeSelectOption value="annual">Annual</NativeSelectOption>
-                          <NativeSelectOption value="custom">Custom</NativeSelectOption>
-                        </NativeSelect>
-                      </label>
-                      {cadenceValue === "custom" && (
-                        <label className="recurring-edit-field">
-                          <span>Days between charges</span>
-                          <Input
-                            max={730}
-                            min={7}
-                            onChange={(e) => setCustomIntervalValue(e.target.valueAsNumber)}
-                            type="number"
-                            value={customIntervalValue ?? ""}
-                          />
-                        </label>
-                      )}
-                      {cadenceProblem && <Alert variant="destructive"><AlertDescription>{cadenceProblem}</AlertDescription></Alert>}
-                      <Button
-                        disabled={
-                          cadenceBusy ||
-                          (cadenceValue === "custom" &&
-                            (customIntervalValue === null || Number.isNaN(customIntervalValue)))
-                        }
-                        onClick={() => void submitCadence(row.id)}
-                        type="button"
-                      >
-                        {cadenceBusy ? "Saving…" : "Save cadence"}
-                      </Button>
-                      <Button
-                        onClick={() => setCadenceEditingId(undefined)}
-                        type="button"
-                        variant="ghost"
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  )}
-
-                  {renamingId === row.id && (
-                    <div className="recurring-dismiss-form">
-                      <label className="recurring-edit-field">
-                        <span>Label</span>
-                        <Input onChange={(e) => setRenameValue(e.target.value)} value={renameValue} />
-                      </label>
-                      {renameProblem && <Alert variant="destructive"><AlertDescription>{renameProblem}</AlertDescription></Alert>}
-                      <Button
-                        disabled={renameBusy || !renameValue.trim()}
-                        onClick={() => void submitRename(row.id)}
-                        type="button"
-                      >
-                        {renameBusy ? "Saving…" : "Save name"}
-                      </Button>
-                      <Button onClick={() => setRenamingId(undefined)} type="button" variant="ghost">
-                        Cancel
-                      </Button>
-                    </div>
-                  )}
-                  </RowActions>
-                </li>
-              ))}
-            </ul>
+              <DataTableRegion label={`${view === "active" ? "Active" : "Ended"} recurring payment table`}>
+                <table className="console-table recurring-lifecycle-table">
+                  <thead><tr><th>Payment</th><th>Cadence</th><th>Payment source</th><th>Status</th><th>{view === "active" ? "Next" : "Ended"}</th><th className="console-number">Amount</th><th><span className="sr-only">Actions</span></th></tr></thead>
+                  <tbody>{(view === "active" ? active : ended).map(paymentRow)}</tbody>
+                </table>
+              </DataTableRegion>
             )}
           </section>}
         </>

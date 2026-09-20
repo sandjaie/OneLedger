@@ -2,13 +2,18 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { MoreHorizontalIcon } from "lucide-react";
 
 import { ConfirmAction } from "@/app/ui/confirm-action";
 import { CADENCE_TEXT, END_REASON_TEXT, STATUS_TEXT } from "@/app/recurring/recurring-screen";
+import { AttentionRow } from "@/app/ui/attention-row";
+import { ConsolePageHeader } from "@/app/ui/console-page-header";
+import { DataTableRegion } from "@/app/ui/data-table-region";
+import { MetricStrip } from "@/app/ui/metric-strip";
+import { RowActions } from "@/app/ui/row-actions";
+import { StatusLabel } from "@/app/ui/status-label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { ApiError, errorText, type apiFetch } from "@/lib/api/client";
@@ -238,17 +243,54 @@ export function SubscriptionDetail({ currencies, baseCurrency, request, seriesId
     chargesByPeriod.set(charge.periodId, [...(chargesByPeriod.get(charge.periodId) ?? []), charge]);
   }
 
+  const manageActions = detail ? (
+    <RowActions
+      floating
+      label={`Manage ${detail.label}`}
+      triggerContent={<MoreHorizontalIcon aria-hidden="true" />}
+    >
+      <div className="plans-settlement-actions">
+        <Button disabled={flipBusy} onClick={() => void flipOff()} type="button" variant="outline">
+          {flipBusy ? "Saving…" : "Not a subscription"}
+        </Button>
+        {!renaming && <Button onClick={startRename} type="button" variant="outline">Rename</Button>}
+        {detail.isCurrent && <NativeSelect aria-label="Status" disabled={statusBusy}
+          onChange={(e) => void setStatus(e.target.value)} value={detail.lifecycle}>
+          <NativeSelectOption value="active">Active</NativeSelectOption>
+          <NativeSelectOption value="trial">Trial</NativeSelectOption>
+          <NativeSelectOption value="paused">Paused</NativeSelectOption>
+        </NativeSelect>}
+        <NativeSelect aria-label="Payment channel" disabled={channelBusy}
+          onChange={(e) => void setChannel(e.target.value)} value={detail.paymentChannelId ?? ""}>
+          <NativeSelectOption value="">No channel set</NativeSelectOption>
+          {channels.map((channel) => <NativeSelectOption key={channel.id} value={channel.id}>{channel.name}</NativeSelectOption>)}
+        </NativeSelect>
+        {!cadenceEditing && <Button onClick={startCadence} type="button" variant="outline">Cadence</Button>}
+        {detail.isCurrent ? (
+          <ConfirmAction actionLabel="Confirm cancel" busy={cancelBusy}
+            message={`Cancel ${detail.label}? This closes its current billing period.`}
+            onConfirm={cancel} title="Cancel subscription" triggerLabel="Cancel" />
+        ) : (
+          <Button disabled={resumeBusy} onClick={() => void resume()} type="button" variant="outline">
+            {resumeBusy ? "Resuming…" : "Resume"}
+          </Button>
+        )}
+      </div>
+    </RowActions>
+  ) : null;
+
   return (
     <section className="workspace-content subscription-detail-screen" aria-labelledby="subscription-detail-title">
-      <header className="investment-entry-header">
-        <div>
-          <p className="eyebrow">Subscription</p>
-          <h1 className="workspace-title" id="subscription-detail-title">
-            {state === "ready" && detail ? detail.label : "Subscription"}
-          </h1>
-        </div>
-        <Link className={buttonVariants({ variant: "outline" })} href="/subscriptions">Back to Subscriptions</Link>
-      </header>
+      <div id="subscription-detail-title">
+        <ConsolePageHeader
+          actions={<>
+            <Link className={buttonVariants({ variant: "outline", size: "sm" })} href="/subscriptions">Back to Subscriptions</Link>
+            {manageActions}
+          </>}
+          description="Billing evidence, lifecycle periods and price history."
+          title={state === "ready" && detail ? detail.label : "Subscription"}
+        />
+      </div>
 
       {state === "loading" && <p className="investment-state" role="status">Loading subscription…</p>}
       {state === "not_found" && (
@@ -270,95 +312,34 @@ export function SubscriptionDetail({ currencies, baseCurrency, request, seriesId
       {state === "ready" && detail && (
         <>
           <div className="subscription-detail-status">
-            <Badge variant={detail.status === "overdue" ? "destructive" : "secondary"}>{STATUS_TEXT[detail.status] ?? detail.status}</Badge>
-            {detail.needsName && <Badge variant="outline">Needs a name</Badge>}
+            <StatusLabel tone={detail.status === "overdue" ? "danger" : detail.status === "ended" ? "neutral" : "success"}>{STATUS_TEXT[detail.status] ?? detail.status}</StatusLabel>
+            {detail.needsName && <StatusLabel tone="attention">Needs a name</StatusLabel>}
           </div>
           {[flipProblem, statusProblem, channelProblem, cancelProblem, resumeProblem].filter(Boolean).map((message) => (
             <Alert key={message} variant="destructive"><AlertDescription>{message}</AlertDescription></Alert>
           ))}
 
-          <dl className="portfolio-metrics" aria-label="Subscription facts">
-            <div>
-              <dt>Amount</dt>
-              <dd>
-                {detail.nativeAmount !== null && detail.nativeCurrency !== null
-                  ? `${moneyText(detail.nativeAmount, detail.nativeCurrency, currencies)} ${perCadence(
-                      detail.cadence,
-                      detail.customIntervalDays,
-                    )}`
-                  : "Amount appears after the next refresh"}
-              </dd>
-            </div>
+          <MetricStrip label="Subscription facts" items={[
+            { label: "Amount", value: detail.nativeAmount !== null && detail.nativeCurrency !== null
+              ? `${moneyText(detail.nativeAmount, detail.nativeCurrency, currencies)} ${perCadence(detail.cadence, detail.customIntervalDays)}`
+              : "Amount appears after the next refresh", detail: CADENCE_TEXT[detail.cadence] ?? detail.cadence },
+            { label: "Next expected", value: detail.nextExpectedOn ?? "Unknown", detail: STATUS_TEXT[detail.status] ?? detail.status },
+            { label: "Spent so far", value: moneyText(detail.spentSoFarBase, baseCurrency, currencies), detail: `Since ${detail.firstSeenOn}` },
+            { label: "Last 12 months", value: moneyText(detail.last12MonthsBase, baseCurrency, currencies), detail: `${detail.periodCount} ${detail.periodCount === 1 ? "period" : "periods"}` },
+          ]} />
+
+          <dl className="console-figures subscription-context-facts" aria-label="Subscription context">
             <div><dt>Category</dt><dd>{detail.categoryName ?? "Uncategorized"}</dd></div>
-            <div><dt>Next expected</dt><dd>{detail.nextExpectedOn ?? "Unknown"}</dd></div>
-            <div>
-              <dt>Paying account</dt>
-              <dd>
-                {detail.payingAccountName
-                  ? `${detail.payingAccountName}${
-                      detail.payingAccountMasked ? ` (${detail.payingAccountMasked})` : ""
-                    }`
-                  : "Unknown"}
-                {detail.paymentChannelName ? ` · ${detail.paymentChannelName}` : ""}
-              </dd>
-            </div>
-            <div><dt>Started</dt><dd>{detail.firstSeenOn}</dd></div>
-            <div><dt>Spent so far</dt><dd>{moneyText(detail.spentSoFarBase, baseCurrency, currencies)}</dd></div>
-            <div><dt>Last 12 months</dt><dd>{moneyText(detail.last12MonthsBase, baseCurrency, currencies)}</dd></div>
-            <div><dt>Status</dt><dd>{STATUS_TEXT[detail.status] ?? detail.status}{detail.resumed ? " · Resumed" : ""}</dd></div>
+            <div><dt>Paying account</dt><dd>{detail.payingAccountName
+              ? `${detail.payingAccountName}${detail.payingAccountMasked ? ` (${detail.payingAccountMasked})` : ""}`
+              : "Unknown"}</dd></div>
+            <div><dt>Channel</dt><dd>{detail.paymentChannelName ?? "Not recorded"}</dd></div>
+            <div><dt>Lifecycle</dt><dd>{STATUS_TEXT[detail.status] ?? detail.status}{detail.resumed ? " · Resumed" : ""}</dd></div>
           </dl>
 
           {detail.priceChangedFrom && detail.priceChangedOn && detail.nativeAmount !== null && detail.nativeCurrency !== null && (
-            <p className="inline-alert">
-              Price changed from {moneyText(detail.priceChangedFrom, detail.nativeCurrency, currencies)} to{" "}
-              {moneyText(detail.nativeAmount, detail.nativeCurrency, currencies)} on {detail.priceChangedOn}
-            </p>
+            <AttentionRow detail={`From ${moneyText(detail.priceChangedFrom, detail.nativeCurrency, currencies)} to ${moneyText(detail.nativeAmount, detail.nativeCurrency, currencies)} on ${detail.priceChangedOn}`} title="Price changed" tone="attention" />
           )}
-
-          <Card className="subscription-detail-controls">
-            <CardHeader><CardTitle>Manage subscription</CardTitle></CardHeader>
-            <CardContent className="plans-settlement-actions">
-            <Button disabled={flipBusy} onClick={() => void flipOff()} type="button" variant="outline">
-              {flipBusy ? "Saving…" : "Not a subscription"}
-            </Button>
-            {!renaming && (
-              <Button onClick={startRename} type="button" variant="outline">Rename</Button>
-            )}
-            {detail.isCurrent && <NativeSelect
-              aria-label="Status"
-              disabled={statusBusy}
-              onChange={(e) => void setStatus(e.target.value)}
-              value={detail.lifecycle}
-            >
-              <NativeSelectOption value="active">Active</NativeSelectOption>
-              <NativeSelectOption value="trial">Trial</NativeSelectOption>
-              <NativeSelectOption value="paused">Paused</NativeSelectOption>
-            </NativeSelect>}
-            <NativeSelect
-              aria-label="Payment channel"
-              disabled={channelBusy}
-              onChange={(e) => void setChannel(e.target.value)}
-              value={detail.paymentChannelId ?? ""}
-            >
-              <NativeSelectOption value="">No channel set</NativeSelectOption>
-              {channels.map((channel) => (
-                <NativeSelectOption key={channel.id} value={channel.id}>{channel.name}</NativeSelectOption>
-              ))}
-            </NativeSelect>
-            {!cadenceEditing && (
-              <Button onClick={startCadence} type="button" variant="outline">Cadence</Button>
-            )}
-            {detail.isCurrent ? (
-              <ConfirmAction actionLabel="Confirm cancel" busy={cancelBusy}
-                message={`Cancel ${detail.label}? This closes its current billing period.`}
-                onConfirm={cancel} title="Cancel subscription" triggerLabel="Cancel" />
-            ) : (
-              <Button disabled={resumeBusy} onClick={() => void resume()} type="button" variant="outline">
-                {resumeBusy ? "Resuming…" : "Resume"}
-              </Button>
-            )}
-            </CardContent>
-          </Card>
 
           {renaming && (
             <div className="recurring-dismiss-form">
@@ -416,48 +397,40 @@ export function SubscriptionDetail({ currencies, baseCurrency, request, seriesId
             </div>
           )}
 
-          <section aria-labelledby="subscription-timeline-title">
-            <p className="section-label" id="subscription-timeline-title">Billing periods</p>
-            <ul className="recurring-confirmed-list">
-              {detail.periods.map((period) => (
-                <li key={period.id}>
-                  <span>
-                    {period.startedOn} – {period.endedOn ?? "now"} ·{" "}
-                    {period.endedOn
-                      ? (END_REASON_TEXT[period.endReason ?? ""] ?? period.endReason ?? "ended")
-                      : "active"}
-                    {!period.endedOn && detail.resumed && ", resumed"}
-                  </span>
-                  <span>
-                    {period.chargeCount} {period.chargeCount === 1 ? "charge" : "charges"} ·{" "}
-                    {moneyText(period.spentBase, baseCurrency, currencies)}
-                  </span>
-                  <ul className="plans-history-list">
-                    {(chargesByPeriod.get(period.id) ?? []).map((charge) => (
-                      <li key={charge.transactionId}>
-                        <Link href={`/transactions?dateFrom=${charge.observedOn}&dateTo=${charge.observedOn}`}>
-                          {charge.observedOn} · {moneyText(charge.amount, charge.currency, currencies)} ·{" "}
-                          {charge.accountName}
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </li>
-              ))}
-            </ul>
+          <section aria-labelledby="subscription-timeline-title" className="console-section">
+            <div className="console-section-head"><h2 id="subscription-timeline-title">Billing periods</h2><span>{detail.periods.length} recorded</span></div>
+            <DataTableRegion label="Billing period timeline">
+              <table className="console-table subscription-period-table">
+                <thead><tr><th>Period</th><th>Status</th><th>Charges</th><th className="console-number">Spend</th><th>Ledger evidence</th></tr></thead>
+                <tbody>{detail.periods.map((period) => <tr key={period.id}>
+                  <th scope="row">{period.startedOn} – {period.endedOn ?? "now"}</th>
+                  <td><StatusLabel tone={period.endedOn ? "neutral" : "success"}>{period.endedOn
+                    ? (END_REASON_TEXT[period.endReason ?? ""] ?? period.endReason ?? "ended")
+                    : `active${detail.resumed ? ", resumed" : ""}`}</StatusLabel></td>
+                  <td>{period.chargeCount} {period.chargeCount === 1 ? "charge" : "charges"}</td>
+                  <td className="console-number">{moneyText(period.spentBase, baseCurrency, currencies)}</td>
+                  <td><ul className="subscription-charge-links">{(chargesByPeriod.get(period.id) ?? []).map((charge) => <li key={charge.transactionId}>
+                    <Link href={`/transactions?dateFrom=${charge.observedOn}&dateTo=${charge.observedOn}`}>
+                      {charge.observedOn} · {moneyText(charge.amount, charge.currency, currencies)} · {charge.accountName}
+                    </Link>
+                  </li>)}</ul></td>
+                </tr>)}</tbody>
+              </table>
+            </DataTableRegion>
           </section>
 
-          <section aria-labelledby="subscription-price-history-title">
-            <p className="section-label" id="subscription-price-history-title">Price history</p>
+          <section aria-labelledby="subscription-price-history-title" className="console-section">
+            <div className="console-section-head"><h2 id="subscription-price-history-title">Price history</h2><span>Observed charges only</span></div>
             {detail.priceHistory.length === 0 && <p>No price history is recorded.</p>}
             {detail.priceHistory.length > 0 && (
-              <ul className="plans-history-list subscription-price-timeline">
+              <ol className="subscription-price-timeline">
                 {detail.priceHistory.map((entry, index) => (
                   <li key={`${entry.observedOn}-${index}`}>
-                    {entry.observedOn} · {moneyText(entry.amount, entry.currency, currencies)}
+                    <span>{entry.observedOn}</span>
+                    <strong>{moneyText(entry.amount, entry.currency, currencies)}</strong>
                   </li>
                 ))}
-              </ul>
+              </ol>
             )}
           </section>
         </>

@@ -124,6 +124,22 @@ describe("recurring screen", () => {
     await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
   });
 
+  it("identifies the specific recurring row that needs an owner-supplied name", async () => {
+    const response: RecurringResponse = { series: [
+      aSeries({ id: "named", label: "Synthetic named payment" }),
+      aSeries({ id: "needs-name", label: "Synthetic unidentified payment", needsName: true }),
+    ] };
+    const request = vi.fn((path: string) => path === "/recurring/refresh"
+      ? Promise.resolve({}) : Promise.resolve(response));
+
+    render(<RecurringScreen currencies={CURRENCIES} request={request as Request} />);
+
+    const row = (await screen.findByText("Synthetic unidentified payment")).closest("tr") as HTMLElement;
+    expect(within(row).getByText("Needs a name")).toBeTruthy();
+    expect(within(screen.getByRole("row", { name: /Synthetic named payment/ }))
+      .queryByText("Needs a name")).toBeNull();
+  });
+
   it("flips the subscription flag by posting isSubscription", async () => {
     const response: RecurringResponse = { series: [aSeries({ isSubscription: false })] };
     const request = vi.fn((path: string) => {
@@ -178,8 +194,6 @@ describe("recurring screen", () => {
     });
 
     render(<RecurringScreen currencies={CURRENCIES} request={request as Request} />);
-    await screen.findByRole("button", { name: "Review Synthetic streaming service" });
-    fireEvent.click(screen.getByRole("button", { name: "Review Synthetic streaming service" }));
     expect(await screen.findByText(/Everyday card \(•••• 4242\)/)).toBeTruthy();
     expect(screen.getByText("App store")).toBeTruthy();
   });

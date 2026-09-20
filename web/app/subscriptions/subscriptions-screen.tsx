@@ -2,15 +2,19 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { MoreHorizontalIcon } from "lucide-react";
 
 import { CADENCE_TEXT, END_REASON_TEXT, STATUS_TEXT } from "@/app/recurring/recurring-screen";
 import { ConfirmAction } from "@/app/ui/confirm-action";
+import { ConsolePageHeader } from "@/app/ui/console-page-header";
+import { DataTableRegion } from "@/app/ui/data-table-region";
+import { DataToolbar } from "@/app/ui/data-toolbar";
+import { MetricStrip } from "@/app/ui/metric-strip";
 import { RowActions } from "@/app/ui/row-actions";
 import { SectionNav } from "@/app/ui/section-nav";
+import { StatusLabel } from "@/app/ui/status-label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
@@ -218,7 +222,11 @@ export function SubscriptionsScreen({ currencies, request }: Props) {
 
   function rowActions(row: RecurringSeriesRow) {
     return (
-      <RowActions label={`Manage ${row.label}`}>
+      <RowActions
+        floating
+        label={`Manage ${row.label}`}
+        triggerContent={<MoreHorizontalIcon aria-hidden="true" />}
+      >
         <div className="plans-settlement-actions">
           <Button disabled={flipBusy === row.id} onClick={() => void flipOff(row)} type="button" variant="outline">
             {flipBusy === row.id ? "Saving…" : "Not a subscription"}
@@ -270,37 +278,58 @@ export function SubscriptionsScreen({ currencies, request }: Props) {
     );
   }
 
+  function statusTone(row: RecurringSeriesRow) {
+    return row.status === "overdue" ? "danger" : row.status === "ended" ? "neutral" : "success";
+  }
+
   function subscriptionRecord(row: RecurringSeriesRow) {
     return (
-      <li className="record-row subscription-record" key={row.id}>
-        <div className="subscription-record-head">
-          <Link href={`/subscriptions/${row.id}`}>{row.label}</Link>
-          <Badge variant={row.status === "overdue" ? "destructive" : "secondary"}>
-            {STATUS_TEXT[row.status] ?? row.status}
-          </Badge>
-          {row.needsName && <Badge variant="outline">Needs a name</Badge>}
-        </div>
-        <strong className="subscription-record-amount">
+      <tr key={row.id}>
+        <th scope="row">
+          <div className="console-entity">
+            <span aria-hidden="true" className="console-entity-mark">SUB</span>
+            <div>
+              <Link className="console-entity-title" href={`/subscriptions/${row.id}`}>{row.label}</Link>
+              <span className="console-entity-sub">{row.categoryName ?? "Uncategorized"}</span>
+            </div>
+          </div>
+        </th>
+        <td>{CADENCE_TEXT[row.cadence] ?? row.cadence}</td>
+        <td className="subscription-source">
+          {row.payingAccountName
+            ? `${row.payingAccountName}${row.payingAccountMasked ? ` (${row.payingAccountMasked})` : ""}`
+            : "Not recorded"}
+          {row.paymentChannelName && <span>{row.paymentChannelName}</span>}
+        </td>
+        <td>
+          <StatusLabel tone={statusTone(row)}>{STATUS_TEXT[row.status] ?? row.status}</StatusLabel>
+          {row.needsName && <StatusLabel tone="attention">Needs a name</StatusLabel>}
+        </td>
+        <td>
+          <span className="subscription-record-date">
+            {row.status === "ended"
+              ? `ended ${row.lastPeriodEndedOn ?? row.lastSeenOn}${row.lastEndReason ? ` (${END_REASON_TEXT[row.lastEndReason] ?? row.lastEndReason})` : ""}`
+              : row.nextExpectedOn ? `Next expected ${row.nextExpectedOn}` : `Last charged ${row.lastSeenOn}`}
+          </span>
+        </td>
+        <td className="console-number subscription-record-amount">
           {row.nativeAmount !== null && row.nativeCurrency !== null
             ? `${moneyText(row.nativeAmount, row.nativeCurrency, currencies)} ${perCadence(row.cadence, row.customIntervalDays)}`
             : "Amount appears after the next refresh"}
-        </strong>
-        <span className="subscription-record-date">
-          {row.status === "ended"
-            ? `ended ${row.lastPeriodEndedOn ?? row.lastSeenOn}${row.lastEndReason ? ` (${END_REASON_TEXT[row.lastEndReason] ?? row.lastEndReason})` : ""}`
-            : row.nextExpectedOn ? `Next expected ${row.nextExpectedOn}` : `Last charged ${row.lastSeenOn}`}
-        </span>
-        {rowActions(row)}
-      </li>
+        </td>
+        <td className="console-row-actions">{rowActions(row)}</td>
+      </tr>
     );
   }
 
   return (
     <section className="workspace-content subscriptions-screen" aria-labelledby="subscriptions-title">
-      <header className="page-head">
-        <p className="eyebrow">Your commitments</p>
-        <h1 className="workspace-title" id="subscriptions-title">Subscriptions</h1>
-      </header>
+      <div id="subscriptions-title">
+        <ConsolePageHeader
+          description="Renewals, lifecycle and payment evidence in one compact register."
+          title="Subscriptions"
+        />
+      </div>
       <Collapsible className="experience-disclosure">
         <CollapsibleTrigger>How subscriptions are identified</CollapsibleTrigger>
         <CollapsibleContent><p>Estimates come from the latest ledger charges. Choose &ldquo;not a subscription&rdquo; to move a row to Recurring.</p></CollapsibleContent>
@@ -319,89 +348,94 @@ export function SubscriptionsScreen({ currencies, request }: Props) {
             <Alert key={message} variant="destructive"><AlertDescription>{message}</AlertDescription></Alert>
           ))}
 
-          <section aria-label="Next renewal" className="subscription-next">
-            <Card>
-              <CardHeader><CardTitle>Next renewal</CardTitle></CardHeader>
-              <CardContent>
-                {summary.upcoming[0] ? (
-                  <div className="subscription-next-facts">
-                    <Link href={`/subscriptions/${summary.upcoming[0].seriesId}`}>{summary.upcoming[0].label}</Link>
-                    <strong>{summary.upcoming[0].nextExpectedOn}</strong>
-                    <span>{summary.upcoming[0].nativeAmount !== null && summary.upcoming[0].nativeCurrency !== null
-                      ? moneyText(summary.upcoming[0].nativeAmount, summary.upcoming[0].nativeCurrency, currencies)
-                      : "Amount appears after the next refresh"}</span>
-                    {summary.upcoming[0].payingAccountName && <span>Paid from {summary.upcoming[0].payingAccountName}</span>}
-                    <span>{summary.renewingIn30Days} renewing in the next 30 days</span>
-                  </div>
-                ) : <p>Nothing is expected to renew in the next 30 days.</p>}
-              </CardContent>
-            </Card>
+          <section aria-label="Next renewal" className="subscription-next console-lead">
+            <div>
+              <span>Next renewal</span>
+              {summary.upcoming[0] ? (
+                <>
+                  <Link href={`/subscriptions/${summary.upcoming[0].seriesId}`}>{summary.upcoming[0].label}</Link>
+                  <strong>{summary.upcoming[0].nextExpectedOn}</strong>
+                </>
+              ) : <strong>Nothing is expected to renew in the next 30 days.</strong>}
+            </div>
+            {summary.upcoming[0] && <div className="console-lead-facts">
+              <strong>{summary.upcoming[0].nativeAmount !== null && summary.upcoming[0].nativeCurrency !== null
+                ? moneyText(summary.upcoming[0].nativeAmount, summary.upcoming[0].nativeCurrency, currencies)
+                : "Amount appears after the next refresh"}</strong>
+              {summary.upcoming[0].payingAccountName && <span>Paid from {summary.upcoming[0].payingAccountName}</span>}
+              <span>{summary.renewingIn30Days} renewing in the next 30 days</span>
+            </div>}
           </section>
 
-          <section aria-label="Subscription totals" className="overview-summary-grid">
-            <article>
-              <p className="section-label">Monthly equivalent</p>
-              <p className="overview-summary-value">
-                {moneyText(summary.monthlyBase, summary.baseCurrency, currencies)}
-              </p>
-            </article>
-            <article>
-              <p className="section-label">Annual spend</p>
-              <p className="overview-summary-value">
-                {moneyText(summary.annualBase, summary.baseCurrency, currencies)}
-              </p>
-            </article>
-            <article>
-              <p className="section-label">Current</p>
-              <p className="overview-summary-value">{summary.currentCount}</p>
-            </article>
-          </section>
+          <MetricStrip label="Subscription totals" items={[
+            { label: "Monthly equivalent", value: moneyText(summary.monthlyBase, summary.baseCurrency, currencies), detail: "Server-normalized" },
+            { label: "Annual spend", value: moneyText(summary.annualBase, summary.baseCurrency, currencies), detail: `${summary.priceChangesIn90Days} price changes in 90 days` },
+            { label: "Current", value: String(summary.currentCount), detail: `${summary.renewingIn30Days} renew in 30 days` },
+          ]} />
 
-          <SectionNav activeId={view} items={[
-            { id: "current", label: "Current" },
-            { id: "upcoming", label: "Upcoming" },
-            { id: "past", label: "Past" },
-          ]} onSelect={(id) => setView(id as View)} />
+          <DataToolbar
+            label="Subscription lifecycle views"
+            summary={`${subscriptions.length} ${subscriptions.length === 1 ? "subscription" : "subscriptions"}`}
+          >
+            <SectionNav activeId={view} items={[
+              { id: "current", label: "Current" },
+              { id: "upcoming", label: "Upcoming" },
+              { id: "past", label: "Past" },
+            ]} onSelect={(id) => setView(id as View)} />
+          </DataToolbar>
 
           {view === "upcoming" && <section className="subscription-view" aria-label="Upcoming subscriptions">
-            <h2>Upcoming</h2>
+            <div className="console-section-head"><h2>Upcoming renewals</h2><span>Next 30 days</span></div>
             {summary.upcoming.length === 0 && <p>Nothing is expected to renew in the next 30 days.</p>}
-            {summary.upcoming.length > 0 && <ul className="recurring-confirmed-list">
-              {summary.upcoming.map((row) => <li className="record-row subscription-record" key={row.seriesId}>
-                <Link href={`/subscriptions/${row.seriesId}`}>{row.label}</Link>
-                <strong>{row.nativeAmount !== null && row.nativeCurrency !== null
-                  ? moneyText(row.nativeAmount, row.nativeCurrency, currencies)
-                  : "Amount appears after the next refresh"}</strong>
-                <span>Expected {row.nextExpectedOn}</span>
-                {row.payingAccountName && <span>Paid from {row.payingAccountName}</span>}
-              </li>)}
-            </ul>}
+            {summary.upcoming.length > 0 && <DataTableRegion label="Upcoming renewal table">
+              <table className="console-table subscription-lifecycle-table">
+                <thead><tr><th>Subscription</th><th>Expected</th><th>Payment source</th><th className="console-number">Amount</th></tr></thead>
+                <tbody>{summary.upcoming.map((row) => <tr key={row.seriesId}>
+                  <th scope="row"><Link href={`/subscriptions/${row.seriesId}`}>{row.label}</Link></th>
+                  <td>{row.nextExpectedOn}</td>
+                  <td>{row.payingAccountName ?? "Not recorded"}</td>
+                  <td className="console-number">{row.nativeAmount !== null && row.nativeCurrency !== null
+                    ? moneyText(row.nativeAmount, row.nativeCurrency, currencies)
+                    : "Amount appears after the next refresh"}</td>
+                </tr>)}</tbody>
+              </table>
+            </DataTableRegion>}
           </section>}
 
           {view === "current" && <section className="subscription-view" aria-label="Current subscriptions">
-            <div className="section-head">
-              <h2>Current</h2>
-              <Badge variant="outline">{summary.priceChangesIn90Days} price changes in 90 days</Badge>
-            </div>
+            <div className="console-section-head"><h2>Current subscriptions</h2><span>Sorted by source order</span></div>
             {current.length === 0 && <p>No current subscription has been found yet.</p>}
-            {current.length > 0 && <ul className="recurring-confirmed-list">{current.map(subscriptionRecord)}</ul>}
+            {current.length > 0 && <DataTableRegion label="Current subscription table">
+              <table className="console-table subscription-lifecycle-table">
+                <thead><tr><th>Subscription</th><th>Cadence</th><th>Payment source</th><th>Status</th><th>Renewal</th><th className="console-number">Amount</th><th><span className="sr-only">Actions</span></th></tr></thead>
+                <tbody>{current.map(subscriptionRecord)}</tbody>
+              </table>
+            </DataTableRegion>}
             <div className="subscription-by-card">
-              <h3>By card</h3>
+              <div className="console-section-head"><h3>By card</h3><span>{byAccount?.length ?? 0} payment sources</span></div>
               {(!byAccount || byAccount.length === 0) && <p>No subscription is linked to a card yet.</p>}
-              {byAccount && byAccount.length > 0 && <ul className="recurring-confirmed-list">
-                {byAccount.map((row) => <li className="record-row" key={row.accountId}>
-                  <strong>{row.accountName}{row.accountMasked ? ` (${row.accountMasked})` : ""}</strong>
-                  <span>{row.count} {row.count === 1 ? "subscription" : "subscriptions"} · {row.labels.join(", ")}</span>
-                  <span>{moneyText(row.monthlyBase, summary.baseCurrency, currencies)} / month</span>
-                </li>)}
-              </ul>}
+              {byAccount && byAccount.length > 0 && <DataTableRegion label="Subscriptions by card">
+                <table className="console-table subscription-account-table">
+                  <thead><tr><th>Payment source</th><th>Subscriptions</th><th className="console-number">Monthly</th></tr></thead>
+                  <tbody>{byAccount.map((row) => <tr key={row.accountId}>
+                    <th scope="row">{row.accountName}{row.accountMasked ? ` (${row.accountMasked})` : ""}</th>
+                    <td>{row.count} {row.count === 1 ? "subscription" : "subscriptions"} · {row.labels.join(", ")}</td>
+                    <td className="console-number">{moneyText(row.monthlyBase, summary.baseCurrency, currencies)} / month</td>
+                  </tr>)}</tbody>
+                </table>
+              </DataTableRegion>}
             </div>
           </section>}
 
           {view === "past" && <section className="subscription-view" aria-label="Past subscriptions">
-            <h2>Past</h2>
+            <div className="console-section-head"><h2>Past subscriptions</h2><span>Ended history retained</span></div>
             {past.length === 0 && <p>No past subscription is recorded.</p>}
-            {past.length > 0 && <ul className="recurring-confirmed-list">{past.map(subscriptionRecord)}</ul>}
+            {past.length > 0 && <DataTableRegion label="Past subscription table">
+              <table className="console-table subscription-lifecycle-table">
+                <thead><tr><th>Subscription</th><th>Cadence</th><th>Payment source</th><th>Status</th><th>Ended</th><th className="console-number">Amount</th><th><span className="sr-only">Actions</span></th></tr></thead>
+                <tbody>{past.map(subscriptionRecord)}</tbody>
+              </table>
+            </DataTableRegion>}
           </section>}
         </>
       )}

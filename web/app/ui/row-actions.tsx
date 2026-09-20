@@ -19,8 +19,8 @@ type RowActionsProps = {
    * `auto` as well, so an absolutely positioned panel would be clipped by the region and would
    * grow it a surprise vertical scrollbar. Anchoring the panel with `position: fixed` takes it
    * out of every ancestor's clip box; it is closed on scroll and resize so it can never sit
-   * away from the trigger it belongs to. Screens that still use the inline disclosure — the
-   * subscription and recurring records — are unaffected. */
+   * away from the trigger it belongs to. Callers outside console tables can still choose the
+   * inline disclosure when expanding the layout is intentional. */
   floating?: boolean;
 };
 
@@ -34,7 +34,7 @@ export function RowActions({ children, id, label, triggerContent, triggerId, flo
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
-  const [anchor, setAnchor] = useState<{ top: number; left: number; flip: boolean }>();
+  const [anchor, setAnchor] = useState<{ top: number; left: number; flip: boolean; maxHeight: number }>();
 
   function close() {
     setOpen(false);
@@ -51,8 +51,15 @@ export function RowActions({ children, id, label, triggerContent, triggerId, flo
       // A fixed panel cannot be scrolled to, so a trigger near the bottom of the viewport opens
       // its panel upward instead of off the fold.
       if (rect) {
-        const flip = window.innerHeight - rect.bottom < FLIP_THRESHOLD_PX;
-        setAnchor({ top: flip ? rect.top - 6 : rect.bottom + 6, left: rect.right, flip });
+        const availableBelow = Math.max(0, window.innerHeight - rect.bottom - 12);
+        const availableAbove = Math.max(0, rect.top - 12);
+        const flip = availableBelow < FLIP_THRESHOLD_PX;
+        setAnchor({
+          top: flip ? rect.top - 6 : rect.bottom + 6,
+          left: rect.right,
+          flip,
+          maxHeight: flip ? availableAbove : availableBelow,
+        });
       }
     }
     setOpen(true);
@@ -117,7 +124,9 @@ export function RowActions({ children, id, label, triggerContent, triggerId, flo
         onKeyDown={handleContentKeyDown}
         role="region"
         data-flip={anchor?.flip ? "true" : undefined}
-        style={floating && anchor ? { top: anchor.top, left: anchor.left } : undefined}
+        style={floating && anchor
+          ? { top: anchor.top, left: anchor.left, maxHeight: anchor.maxHeight }
+          : undefined}
       >
         {children}
       </div>

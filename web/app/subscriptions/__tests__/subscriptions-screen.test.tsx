@@ -110,7 +110,7 @@ describe("subscriptions screen", () => {
     expect(within(next).getByText(/Synthetic streaming service/)).toBeTruthy();
     expect(within(next).getByText(/2026-09-01/)).toBeTruthy();
     expect(within(next).getByText(/\$15\.0000/)).toBeTruthy();
-    expect(within(screen.getByRole("region", { name: "Subscription totals" })).getAllByRole("article")).toHaveLength(3);
+    expect(within(screen.getByRole("region", { name: "Subscription totals" })).getAllByRole("term")).toHaveLength(3);
   });
 
   it("switches Current and Past without presenting an ended row as current", async () => {
@@ -297,8 +297,7 @@ describe("subscriptions screen", () => {
     const request = fixedRequest(series, summary, byAccount);
 
     render(<SubscriptionsScreen currencies={CURRENCIES} request={request as Request} />);
-    await screen.findByText("By card");
-    const byCardList = screen.getByText("By card").nextElementSibling as HTMLElement;
+    const byCardList = await screen.findByRole("region", { name: "Subscriptions by card" });
     expect(within(byCardList).getByText(/Everyday card \(•••• 4242\)/)).toBeTruthy();
     expect(within(byCardList).getByText(/1 subscription · Synthetic streaming service/)).toBeTruthy();
   });
