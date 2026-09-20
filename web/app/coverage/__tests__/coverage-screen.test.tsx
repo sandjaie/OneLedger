@@ -87,11 +87,15 @@ describe("coverage screen", () => {
   it("opens the earliest unresolved gap directly from the summary", async () => {
     const request = requestFrom((path) => path === "/coverage" ? baseCoverage : {});
     render(<CoverageScreen request={request} />);
-    fireEvent.click(await screen.findByRole("button", { name: /Review earliest gap/ }));
+    const reviewButton = await screen.findByRole("button", { name: /Review earliest gap/ });
+    reviewButton.focus();
+    fireEvent.click(reviewButton);
     const heading = screen.getByRole("heading", { name: "Synthetic current account · 2024-02-01" });
     expect(heading).toBeTruthy();
     expect(document.activeElement).toBe(heading.closest("section"));
     expect(request).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(document.activeElement).toBe(reviewButton));
   });
 
   it("acknowledges a missing cell and refreshes the grid", async () => {
@@ -132,14 +136,15 @@ describe("coverage screen", () => {
     });
     render(<CoverageScreen request={request} />);
 
-    fireEvent.click(await screen.findByLabelText("Synthetic current account 2024-02-01: Missing"));
+    const missingButton = await screen.findByLabelText("Synthetic current account 2024-02-01: Missing");
+    missingButton.focus();
+    fireEvent.click(missingButton);
     expect(await screen.findByText("Import statements")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Acknowledge gap" }));
 
     await waitFor(() => expect(screen.getByText("Gap acknowledged.")).toBeTruthy());
-    expect(
-      await screen.findByLabelText("Synthetic current account 2024-02-01: Acknowledged"),
-    ).toBeTruthy();
+    const acknowledgedButton = await screen.findByLabelText("Synthetic current account 2024-02-01: Acknowledged");
+    await waitFor(() => expect(document.activeElement).toBe(acknowledgedButton));
   });
 
   it("removes an acknowledgement from an acknowledged cell", async () => {
@@ -174,11 +179,14 @@ describe("coverage screen", () => {
     });
     render(<CoverageScreen request={request} />);
 
-    fireEvent.click(await screen.findByLabelText("Payslips 2024-01-01: Acknowledged"));
+    const acknowledgedButton = await screen.findByLabelText("Payslips 2024-01-01: Acknowledged");
+    acknowledgedButton.focus();
+    fireEvent.click(acknowledgedButton);
     expect(await screen.findByText(/no paper record/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Remove acknowledgement" }));
 
     await waitFor(() => expect(screen.getByText("Acknowledgement removed.")).toBeTruthy());
-    expect(await screen.findByLabelText("Payslips 2024-01-01: Missing")).toBeTruthy();
+    const missingButton = await screen.findByLabelText("Payslips 2024-01-01: Missing");
+    await waitFor(() => expect(document.activeElement).toBe(missingButton));
   });
 });

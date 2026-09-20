@@ -57,6 +57,28 @@ function featuredGroup(groups: Array<ClassificationReviewGroup>) {
   }, undefined);
 }
 
+async function strongestQueueGroup(
+  request: typeof apiFetch,
+  initial: ClassificationReviewResponse,
+  sort: Sort,
+) {
+  let best = featuredGroup(initial.groups);
+  let offset = initial.groups.length;
+  // Confidence is bounded at 1.000 by the API. Once that exact maximum is present there is no
+  // need to read farther; otherwise exhaust the authenticated queue so "strongest" is global,
+  // not an accidental property of the current 50-row page.
+  while (best?.proposedConfidence !== "1.000" && offset < initial.totalGroups) {
+    const next = await request<ClassificationReviewResponse>(groupsPath(offset, sort));
+    const candidate = featuredGroup(next.groups);
+    if (candidate && (!best || candidate.proposedConfidence.localeCompare(best.proposedConfidence) > 0)) {
+      best = candidate;
+    }
+    if (next.groups.length === 0) break;
+    offset += next.groups.length;
+  }
+  return best;
+}
+
 const REASON_LABELS: Record<ClassificationReviewGroup["reason"], string> = {
   conflicting_knowledge: "Conflicting knowledge",
   conflicting_prior: "Conflicting history",
@@ -516,11 +538,31 @@ export function ClassificationReviewScreen({ categories, request }: Props) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [moreProblem, setMoreProblem] = useState<string>();
   const [sort, setSort] = useState<Sort>("default");
+  const [featured, setFeatured] = useState<ClassificationReviewGroup>();
+  const [featuredProblem, setFeaturedProblem] = useState(false);
 
   useEffect(() => {
     let current = true;
     request<ClassificationReviewResponse>(groupsPath(0, sort))
-      .then((result) => { if (current) setPage(result); })
+      .then((result) => {
+        if (!current) return;
+        setPage(result);
+        const initialFeatured = featuredGroup(result.groups);
+        if (
+          initialFeatured?.proposedConfidence === "1.000"
+          || result.groups.length >= result.totalGroups
+        ) {
+          setFeatured(initialFeatured);
+          return;
+        }
+        void strongestQueueGroup(request, result, sort)
+          .then((strongest) => {
+            if (current) setFeatured(strongest);
+          })
+          .catch(() => {
+            if (current) setFeaturedProblem(true);
+          });
+      })
       .catch(() => { if (current) setProblem("The review queue could not be loaded."); })
       .finally(() => { if (current) setLoading(false); });
     return () => { current = false; };
@@ -529,6 +571,8 @@ export function ClassificationReviewScreen({ categories, request }: Props) {
   function retry() {
     setLoading(true);
     setProblem(undefined);
+    setFeatured(undefined);
+    setFeaturedProblem(false);
     setAttempt((value) => value + 1);
   }
 
@@ -536,6 +580,8 @@ export function ClassificationReviewScreen({ categories, request }: Props) {
     setLoading(true);
     setProblem(undefined);
     setPage(undefined);
+    setFeatured(undefined);
+    setFeaturedProblem(false);
     setSort(next);
   }
 
@@ -563,7 +609,6 @@ export function ClassificationReviewScreen({ categories, request }: Props) {
   }
 
   const remaining = page ? Math.max(0, page.totalGroups - page.groups.length) : 0;
-  const featured = page ? featuredGroup(page.groups) : undefined;
   const orderedGroups = page && featured
     ? [featured, ...page.groups.filter((group) => group.groupKey !== featured.groupKey)]
     : page?.groups ?? [];
@@ -583,11 +628,11 @@ export function ClassificationReviewScreen({ categories, request }: Props) {
         items={[
           { label: "Review groups", value: String(page.totalGroups), detail: "Authenticated queue total" },
           { label: "Affected rows", value: String(page.totalOccurrences), detail: "Occurrences across the queue" },
-          { label: "Loaded groups", value: String(page.groups.length), detail: "Available in this view" },
+          { label: "Loaded groups", value: String(orderedGroups.length), detail: "Available in this view" },
         ]}
       />}
 
-      <DataToolbar label="Classification queue controls" summary={page ? `${page.groups.length} loaded` : undefined}>
+      <DataToolbar label="Classification queue controls" summary={page ? `${orderedGroups.length} loaded` : undefined}>
         <label className="classification-sort">
           Sort
           <NativeSelect
@@ -610,6 +655,9 @@ export function ClassificationReviewScreen({ categories, request }: Props) {
       )}
       {!loading && !problem && page?.candidateLimitReached && (
         <Alert variant="destructive"><AlertDescription>The candidate scan limit was reached. Use a narrower date range before treating this queue as complete.</AlertDescription></Alert>
+      )}
+      {!loading && !problem && featuredProblem && (
+        <Alert variant="destructive"><AlertDescription>The strongest actionable proposal could not be confirmed across the full queue. The queue remains available, but no group is promoted.</AlertDescription></Alert>
       )}
       {!loading && !problem && page?.groups.length === 0 && (
         <p className="classification-empty">Nothing needs classification review.</p>

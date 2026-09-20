@@ -107,8 +107,16 @@ describe("grouped classification review", () => {
       proposedTxnType: "refund",
       proposedPaymentMethod: "card",
     });
-    const request = vi.fn(async (path: string) => path === "/classification-runs?limit=20&offset=0"
-      ? [] : response([first, second]));
+    const request = vi.fn(async (path: string) => {
+      if (path === "/classification-runs?limit=20&offset=0") return [];
+      if (path === "/classification-review/groups?limit=50&offset=0") {
+        return { ...response([first]), totalGroups: 2, totalOccurrences: 4 };
+      }
+      if (path === "/classification-review/groups?limit=50&offset=1") {
+        return { ...response([second]), totalGroups: 2, totalOccurrences: 4 };
+      }
+      throw new Error(`Unexpected path ${path}`);
+    });
     render(<ClassificationReviewScreen categories={categories} request={request as never} />);
 
     const focus = await screen.findByRole("article", { name: "SECOND MARKET" });

@@ -81,12 +81,21 @@ export function CoverageScreen({ request }: Props) {
   const [problem, setProblem] = useState<string>();
   const [feedback, setFeedback] = useState<string>();
   const selectedRef = useRef<HTMLElement>(null);
+  const selectionOpenerRef = useRef<HTMLElement | null>(null);
+  const gridFallbackRef = useRef<HTMLDivElement>(null);
+  const restoreAfterRefreshRef = useRef(false);
   const summary = coverage ? reviewSummary(coverage) : undefined;
   const firstGap = summary?.firstGap;
 
   useEffect(() => {
     if (selected) selectedRef.current?.focus();
   }, [selected]);
+
+  useEffect(() => {
+    if (!restoreAfterRefreshRef.current) return;
+    restoreAfterRefreshRef.current = false;
+    restoreSelectionFocus();
+  }, [coverage]);
 
   useEffect(() => {
     let current = true;
@@ -108,6 +117,9 @@ export function CoverageScreen({ request }: Props) {
     if (cell.status === "outside_account_life" || cell.status === "reconciled" || cell.status === "in_progress") {
       return;
     }
+    selectionOpenerRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
     setSelected({ row, month, cell });
     setReason(cell.reason ?? "not_issued");
     setNote(cell.note ?? "");
@@ -115,9 +127,20 @@ export function CoverageScreen({ request }: Props) {
     setFeedback(undefined);
   }
 
+  function restoreSelectionFocus() {
+    requestAnimationFrame(() => {
+      const opener = selectionOpenerRef.current;
+      const target = opener && opener !== document.body && opener.isConnected
+        ? opener
+        : gridFallbackRef.current;
+      target?.focus();
+    });
+  }
+
   function closeDialog() {
     setSelected(undefined);
     setProblem(undefined);
+    restoreSelectionFocus();
   }
 
   async function acknowledge() {
@@ -139,6 +162,8 @@ export function CoverageScreen({ request }: Props) {
       });
       setFeedback("Gap acknowledged.");
       setSelected(undefined);
+      restoreAfterRefreshRef.current = true;
+      restoreSelectionFocus();
       setAttempt((value) => value + 1);
     } catch (error) {
       setProblem(errorText(error, "This gap could not be acknowledged."));
@@ -157,6 +182,8 @@ export function CoverageScreen({ request }: Props) {
       await request(`/coverage/acknowledgements?${params.toString()}`, { method: "DELETE" });
       setFeedback("Acknowledgement removed.");
       setSelected(undefined);
+      restoreAfterRefreshRef.current = true;
+      restoreSelectionFocus();
       setAttempt((value) => value + 1);
     } catch (error) {
       setProblem(errorText(error, "This acknowledgement could not be removed."));
@@ -220,6 +247,7 @@ export function CoverageScreen({ request }: Props) {
 
           {feedback && <p role="status">{feedback}</p>}
 
+          <div aria-label="Coverage grid" className="coverage-grid-anchor" ref={gridFallbackRef} role="group" tabIndex={-1}>
           <DataTableRegion label="Coverage by account and month">
             <table className="coverage-table console-table">
               <caption>History coverage, one row per account and payslips</caption>
@@ -261,6 +289,7 @@ export function CoverageScreen({ request }: Props) {
               </tbody>
             </table>
           </DataTableRegion>
+          </div>
 
           {selected && (
             <section aria-labelledby="coverage-dialog-title" className="coverage-dialog" ref={selectedRef} tabIndex={-1}>

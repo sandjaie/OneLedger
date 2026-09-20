@@ -4038,7 +4038,9 @@ body {
 .coverage-screen .experience-disclosure { margin-top: 14px; }
 .coverage-screen .coverage-legend { gap: 6px; margin: 0; }
 .coverage-screen .coverage-legend li { padding: 4px 8px; border-color: var(--console-line); background: transparent; }
-.coverage-screen > .data-table-region { max-height: min(68vh, 680px); border-block: 1px solid var(--console-line); }
+.coverage-grid-anchor { min-width: 0; outline: none; }
+.coverage-grid-anchor:focus-visible { outline: 2px solid var(--console-blue); outline-offset: 2px; }
+.coverage-screen .coverage-grid-anchor > .data-table-region { max-height: min(68vh, 680px); border-block: 1px solid var(--console-line); }
 .coverage-screen .coverage-table { min-width: max-content; }
 .coverage-screen .coverage-table :is(th, td) { border: 0; border-bottom: 1px solid var(--console-line); }
 .coverage-screen .coverage-table :is(thead th, tbody th) { position: sticky; z-index: 1; background: #fff; }
