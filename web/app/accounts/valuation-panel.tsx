@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 
+import { DataTableRegion } from "@/app/ui/data-table-region";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
@@ -212,14 +213,27 @@ export function ValuationPanel({
 
   return (
     <section aria-labelledby="valuation-panel-title" className="valuation-panel">
-      <h2 id="valuation-panel-title">Valuation — {accountName}</h2>
+      <div className="console-section-head">
+        <h2 id="valuation-panel-title">Valuation — {accountName}</h2>
+        <Button onClick={onClose} size="sm" type="button" variant="outline">Close</Button>
+      </div>
       {state === "loading" && <p className="investment-state" role="status">Loading valuation…</p>}
       {state === "error" && <p className="investment-state" role="alert">Valuation could not be loaded.</p>}
       {state === "ready" && data && (
         <>
-          <p className="valuation-current-mode">
-            Current mode: <strong>{MODE_LABEL[data.currentMode]}</strong> since {data.currentEffectiveFrom}
-          </p>
+          <dl className="valuation-facts">
+            <div>
+              <dt>Current mode</dt>
+              <dd className="valuation-current-mode">
+                <strong>{MODE_LABEL[data.currentMode]}</strong> since {data.currentEffectiveFrom}
+              </dd>
+            </div>
+            <div><dt>Account currency</dt><dd>{currency}</dd></div>
+            <div>
+              <dt>Stored valuations</dt>
+              <dd>{data.snapshots.length}</dd>
+            </div>
+          </dl>
 
           {data.currentMode === "snapshot" && (
             <p className="valuation-latest">
@@ -311,6 +325,53 @@ export function ValuationPanel({
             </p>
           )}
 
+          <section aria-label="Stored valuation evidence" className="console-section">
+            <h3>Stored evidence</h3>
+            {data.snapshots.length === 0 ? (
+              <p>No valuation has been recorded for this account yet.</p>
+            ) : (
+              <>
+                <p className="console-module-sub">
+                  Newest first. Each row keeps the rate date it was frozen against; a later
+                  valuation supersedes an earlier one only from its own date.
+                </p>
+                <DataTableRegion label="Stored valuation evidence table">
+                  <table className="console-table">
+                    <caption className="visually-hidden">Stored valuations, newest first</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">As of</th>
+                        <th className="console-number" scope="col">Value ({currency})</th>
+                        <th className="console-number" scope="col">Value ({baseCurrency})</th>
+                        <th scope="col">FX rate date</th>
+                        <th scope="col">Method</th>
+                        <th scope="col">Confidence</th>
+                        <th scope="col">Source note</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.snapshots.map((snapshot) => (
+                        <tr key={snapshot.id}>
+                          <th scope="row">{snapshot.asOfDate}</th>
+                          <td className="console-number">
+                            {moneyText(snapshot.valueNative, currency, currencies)}
+                          </td>
+                          <td className="console-number">
+                            {moneyText(snapshot.valueBase, baseCurrency, currencies)}
+                          </td>
+                          <td>{snapshot.fxRateDate}</td>
+                          <td>{METHOD_LABEL[snapshot.method as (typeof METHODS)[number]] ?? snapshot.method}</td>
+                          <td>{CONFIDENCE_LABEL[snapshot.confidence]}</td>
+                          <td>{snapshot.sourceNote ?? "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </DataTableRegion>
+              </>
+            )}
+          </section>
+
           <form className="valuation-mode-form" onSubmit={(event) => void submitMode(event)}>
             <h3>Change valuation mode</h3>
             <label className="select-field">
@@ -345,7 +406,6 @@ export function ValuationPanel({
           )}
         </>
       )}
-      <Button onClick={onClose} type="button" variant="outline">Close</Button>
     </section>
   );
 }

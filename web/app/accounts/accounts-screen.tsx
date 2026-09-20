@@ -1,17 +1,31 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 
 import { EyeIcon } from "@/app/accounts/eye-icon";
 import { ValuationPanel } from "@/app/accounts/valuation-panel";
-import { Button } from "@/components/ui/button";
+import { AttentionRow } from "@/app/ui/attention-row";
+import { ConsolePageHeader } from "@/app/ui/console-page-header";
+import { DataTableRegion } from "@/app/ui/data-table-region";
+import { MetricStrip } from "@/app/ui/metric-strip";
+import { RowActions } from "@/app/ui/row-actions";
+import { StatusLabel } from "@/app/ui/status-label";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
-import { ACCOUNT_TYPES, INSTITUTION_TYPES, LIABILITY_TYPES } from "@/lib/accounts/types";
+import {
+  ACCOUNT_ROLES,
+  ACCOUNT_ROLE_LABEL,
+  ACCOUNT_TYPES,
+  INSTITUTION_TYPES,
+  LIABILITY_TYPES,
+  accountRole,
+} from "@/lib/accounts/types";
 import { ApiError, type apiFetch, errorText } from "@/lib/api/client";
 import { formatOwed, moneyText } from "@/lib/money/format";
+import Link from "next/link";
 import type {
   AccountCreate,
   AccountGroupTotal,
@@ -19,6 +33,8 @@ import type {
   AccountRow,
   AccountUpdate,
   CurrencyRow,
+  DashboardResponse,
+  HouseholdCurrency,
   InstitutionCreate,
   InstitutionRow,
   RevealedAccountIdentifier,
@@ -31,9 +47,50 @@ type Props = {
   institutions: Array<InstitutionRow>;
   currencies: Array<CurrencyRow>;
   baseCurrency: string;
+  // The reporting currency chosen in the top bar: the reporting-pair strip follows it, while the
+  // grouped subtotals below stay in each account's own native currency.
+  currency: HouseholdCurrency;
   request: typeof apiFetch;
   onChanged: () => void;
 };
+
+/** The four evidence states the specification allows. No age threshold is invented: an old date
+ * is not a problem unless a typed response already says so. */
+type EvidenceStatus = "needs_confirmation" | "missing_snapshot" | "coverage_problem" | "current";
+
+const EVIDENCE_LABEL: Record<EvidenceStatus, string> = {
+  needs_confirmation: "Needs confirmation",
+  missing_snapshot: "Missing snapshot",
+  coverage_problem: "Coverage problem",
+  current: "Current",
+};
+
+const EVIDENCE_TONE: Record<EvidenceStatus, "attention" | "danger" | "success"> = {
+  needs_confirmation: "attention",
+  missing_snapshot: "attention",
+  coverage_problem: "danger",
+  current: "success",
+};
+
+export function evidenceStatus(
+  account: AccountRow,
+  coverageProblems: ReadonlySet<string>,
+): EvidenceStatus {
+  if (!account.openingBalanceConfirmedAt) return "needs_confirmation";
+  if (account.valuationMode === "snapshot" && !account.latestValuationDate) return "missing_snapshot";
+  if (coverageProblems.has(account.id)) return "coverage_problem";
+  return "current";
+}
+
+/** The account ids a dashboard response already names as a typed coverage problem. A missing
+ * snapshot has its own status above, and a current price or current snapshot is not a problem. */
+function coverageProblemAccounts(dashboard: DashboardResponse | undefined): ReadonlySet<string> {
+  return new Set(
+    (dashboard?.netWorth.investmentCoverage ?? [])
+      .filter((item) => !["current_price", "current_snapshot", "missing_snapshot"].includes(item.status))
+      .map((item) => item.accountId),
+  );
+}
 
 type Draft = {
   name: string;
@@ -209,16 +266,15 @@ function toUpdate(draft: Draft, closedOn: string | null, acknowledge: boolean): 
 
 function AccountTableHead() {
   return (
-    <thead className="visually-hidden">
+    <thead>
       <tr>
-        <th scope="col">Institution</th>
         <th scope="col">Account</th>
-        <th scope="col">Detail</th>
-        <th scope="col">Masked number</th>
-        <th scope="col">Balance</th>
-        <th scope="col">Status</th>
+        <th scope="col">Role</th>
+        <th scope="col">Currency</th>
         <th scope="col">Evidence</th>
-        <th scope="col">Actions</th>
+        <th scope="col">Status</th>
+        <th className="console-number" scope="col">Balance</th>
+        <th scope="col"><span className="visually-hidden">Actions</span></th>
       </tr>
     </thead>
   );
@@ -358,6 +414,7 @@ export function AccountsScreen({
   institutions,
   currencies,
   baseCurrency,
+  currency,
   request,
   onChanged,
 }: Props) {
@@ -381,6 +438,39 @@ export function AccountsScreen({
     institutions: Array<InstitutionRow>;
   }>();
   const locked = busy || (held != null && held.accounts === accounts && held.institutions === institutions);
+  // The reporting-pair figures and the typed coverage problems both come from `/dashboard`,
+  // which already resolves one valuation source per account. Fetched once: the strip is
+  // orientation, and a balance change reaches it on the next visit rather than through a refetch
+  // on every row mutation. The native grouped subtotals below always come from `/accounts`.
+  const [dashboard, setDashboard] = useState<DashboardResponse>();
+  const [dashboardState, setDashboardState] = useState<"loading" | "ready" | "error">("loading");
+  // Only the accounts whose evidence needs an owner action, when the attention row asks for them.
+  const [evidenceOnly, setEvidenceOnly] = useState(false);
+  // Focus returns to the row action that opened the valuation panel, not to the top of the page.
+  const valuationOpener = useRef<string>(undefined);
+
+  // The workspace hands a fresh wrapper each render, so the fetch runs on mount only — the same
+  // pattern `overview-screen.tsx` uses — rather than once per re-render.
+  const latestRequest = useRef(request);
+  useEffect(() => {
+    latestRequest.current = request;
+  });
+  useEffect(() => {
+    let current = true;
+    latestRequest
+      .current<DashboardResponse>("/dashboard")
+      .then((loaded) => {
+        if (!current) return;
+        setDashboard(loaded);
+        setDashboardState("ready");
+      })
+      .catch(() => {
+        if (current) setDashboardState("error");
+      });
+    return () => {
+      current = false;
+    };
+  }, []);
 
   function holdUntilRefresh() {
     setHeld({ accounts, institutions });
@@ -389,13 +479,6 @@ export function AccountsScreen({
   const active = accounts.filter((row) => row.isActive);
   const closed = accounts.filter((row) => !row.isActive);
   const latestBalance = latestBalanceDate(active);
-  const groups = [...new Set(active.map((row) => `${row.accountClass}\0${row.country}`))].sort((left, right) => {
-    const [leftClass, leftCountry] = left.split("\0");
-    const [rightClass, rightCountry] = right.split("\0");
-    if (leftClass !== rightClass) return leftClass === "asset" ? -1 : 1;
-    return leftCountry.localeCompare(rightCountry);
-  });
-
   function openAdd() {
     setMode("add");
     setEditing(undefined);
@@ -410,10 +493,19 @@ export function AccountsScreen({
     setProblem(undefined);
   }
 
-  function openValuation(account: AccountRow) {
+  function openValuation(account: AccountRow, openerId?: string) {
+    valuationOpener.current = openerId;
     setMode("valuation");
     setValuing(account);
     setProblem(undefined);
+  }
+
+  function closeValuation() {
+    setMode("view");
+    setValuing(undefined);
+    const opener = valuationOpener.current;
+    valuationOpener.current = undefined;
+    if (opener) window.setTimeout(() => document.getElementById(opener)?.focus(), 0);
   }
 
   function field<K extends keyof Draft>(key: K, value: Draft[K]) {
@@ -550,6 +642,10 @@ export function AccountsScreen({
   }
 
   function balanceLabel(account: AccountRow) {
+    // A snapshot-valued account with no recorded valuation has no balance to state: its stored
+    // `currentBalance` is a placeholder the net-worth sum already ignores, and printing it would
+    // turn missing evidence into a confident zero.
+    if (account.valuationMode === "snapshot" && !account.latestValuationDate) return "Not available";
     const currency = currencies.find((row) => row.code === account.currency);
     if (account.accountClass !== "liability" || !currency) {
       return moneyText(account.currentBalance, account.currency, currencies);
@@ -754,76 +850,65 @@ export function AccountsScreen({
   }
 
   function renderRow(account: AccountRow) {
-    const meta = [
+    const needsFirstValuation = account.valuationMode === "snapshot" && !account.latestValuationDate;
+    const status = evidenceStatus(account, coverageProblems);
+    const evidenceDate = account.valuationMode === "snapshot"
+      ? account.latestValuationDate
+      : account.currentBalanceAsOf?.slice(0, 10) ?? null;
+    const triggerId = `account-actions-${account.id}`;
+    const detail = [
       account.institutionName,
       account.accountSubtype,
-      account.currency,
       account.accountClass === "asset" && account.valuationMode
         ? VALUATION_MODE_LABEL[account.valuationMode]
         : null,
+      account.includeInNetWorth ? null : "Excluded from totals",
+      account.isActive ? null : account.closedOn ? `Closed ${formatDay(account.closedOn)}` : "Closed",
     ].filter(Boolean).join(" · ");
-    const needsFirstValuation = account.valuationMode === "snapshot" && !account.latestValuationDate;
+
     return (
-      <tr className="account-card" key={account.id}>
-        <td className="account-mark">{markFor(account, institutions)}</td>
-        <td className="account-card-name">{account.name}</td>
-        <td className="account-card-detail">{meta}</td>
-        <td className="account-card-mask">
-          {mode === "view" && account.identifiers.length > 0 ? (
-            <span className="account-identifier-list">
-              {account.identifiers.map((identifier) => (
-                <AccountIdentifierValue
-                  accountId={account.id}
-                  accountName={account.name}
-                  identifier={identifier}
-                  key={identifier.id}
-                  request={request}
-                />
-              ))}
-            </span>
-          ) : "—"}
+      <tr key={account.id}>
+        <th scope="row">
+          <div className="console-entity">
+            <span aria-hidden="true" className="console-entity-mark">{markFor(account, institutions)}</span>
+            <div>
+              <span className="console-entity-title">{account.name}</span>
+              <span className="console-entity-sub">{detail}</span>
+              {mode === "view" && account.identifiers.length > 0 && (
+                <span className="account-identifier-list">
+                  {account.identifiers.map((identifier) => (
+                    <AccountIdentifierValue
+                      accountId={account.id}
+                      accountName={account.name}
+                      identifier={identifier}
+                      key={identifier.id}
+                      request={request}
+                    />
+                  ))}
+                </span>
+              )}
+            </div>
+          </div>
+        </th>
+        <td>{ACCOUNT_ROLE_LABEL[accountRole(account.accountType)]}</td>
+        <td>{account.currency}</td>
+        <td>{evidenceDate ? formatDay(evidenceDate) : "Not recorded"}</td>
+        <td>
+          <StatusLabel tone={EVIDENCE_TONE[status]}>{EVIDENCE_LABEL[status]}</StatusLabel>
         </td>
         <td
           aria-label={`${account.name} balance ${balanceLabel(account)}`}
           className={
             account.accountClass === "liability" && account.currentBalance.startsWith("-")
-              ? "account-card-balance account-owed"
-              : "account-card-balance"
+              && status !== "missing_snapshot"
+              ? "console-number account-owed"
+              : "console-number"
           }
         >
           {balanceLabel(account)}
         </td>
-        <td className="account-card-status">
-          {[
-            account.isActive
-              ? account.currentBalanceAsOf
-                ? `Updated ${formatDay(account.currentBalanceAsOf.slice(0, 10))}`
-                : null
-              : account.closedOn
-                ? `Closed ${formatDay(account.closedOn)}`
-                : null,
-            account.includeInNetWorth ? null : "Excluded from totals",
-          ].filter(Boolean).join(" · ")}
-        </td>
-        <td className="account-card-evidence">
-          {!account.openingBalanceConfirmedAt && (
-            <div className="opening-evidence">
-              <span>Opening balance not acknowledged</span>
-              <Button
-                aria-label={`Acknowledge ${account.name}`}
-                disabled={locked}
-                onClick={() => void acknowledge(account)}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                Acknowledge
-              </Button>
-            </div>
-          )}
-        </td>
-        <td className="account-card-actions">
-          <div className="account-row-actions">
+        <td className="console-row-actions">
+          <RowActions label={`Actions for ${account.name}`} triggerContent="⋯" triggerId={triggerId}>
             <Button
               aria-label={`Edit ${account.name}`}
               disabled={locked}
@@ -831,9 +916,7 @@ export function AccountsScreen({
               size="sm"
               type="button"
               variant="ghost"
-            >
-              Edit
-            </Button>
+            >Edit</Button>
             {account.accountClass === "asset" && account.isActive && (
               <Button
                 aria-label={
@@ -842,13 +925,21 @@ export function AccountsScreen({
                     : `Valuation for ${account.name}`
                 }
                 disabled={locked}
-                onClick={() => openValuation(account)}
+                onClick={() => openValuation(account, triggerId)}
                 size="sm"
                 type="button"
                 variant="ghost"
-              >
-                {needsFirstValuation ? "Add valuation" : "Valuation"}
-              </Button>
+              >{needsFirstValuation ? "Add valuation" : "Valuation"}</Button>
+            )}
+            {!account.openingBalanceConfirmedAt && (
+              <Button
+                aria-label={`Acknowledge ${account.name}`}
+                disabled={locked}
+                onClick={() => void acknowledge(account)}
+                size="sm"
+                type="button"
+                variant="ghost"
+              >Acknowledge opening balance</Button>
             )}
             {account.isActive ? (
               <Button
@@ -858,9 +949,7 @@ export function AccountsScreen({
                 size="sm"
                 type="button"
                 variant="ghost"
-              >
-                Close
-              </Button>
+              >Close</Button>
             ) : (
               <Button
                 aria-label={`Reopen ${account.name}`}
@@ -869,47 +958,159 @@ export function AccountsScreen({
                 size="sm"
                 type="button"
                 variant="ghost"
-              >
-                Reopen
-              </Button>
+              >Reopen</Button>
             )}
-          </div>
+          </RowActions>
         </td>
       </tr>
     );
   }
 
+  /** One table, the display roles in the specification's order; inside a role, by name then the
+   * stable id, so the same inventory always renders in the same order. */
+  function renderRoleTable(rows: Array<AccountRow>, label: string) {
+    const ordered = ACCOUNT_ROLES.map((role) => ({
+      role,
+      rows: rows
+        .filter((row) => accountRole(row.accountType) === role)
+        .sort((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id)),
+    })).filter((group) => group.rows.length > 0);
+
+    return (
+      <DataTableRegion label={`${label} table`}>
+        <table className="console-table">
+          <caption className="visually-hidden">{label}</caption>
+          <AccountTableHead />
+          <tbody>
+            {ordered.map((group) => (
+              <Fragment key={group.role}>
+                <tr className="console-group-row">
+                  <td colSpan={7}>
+                    {ACCOUNT_ROLE_LABEL[group.role]} · {group.rows.length}{" "}
+                    {group.rows.length === 1 ? "account" : "accounts"}
+                  </td>
+                </tr>
+                {group.rows.map(renderRow)}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
+      </DataTableRegion>
+    );
+  }
+
+  const coverageProblems = coverageProblemAccounts(dashboard);
+  const attention = active.filter((row) => evidenceStatus(row, coverageProblems) !== "current");
+  const needingConfirmation = attention.filter((row) => !row.openingBalanceConfirmedAt).length;
+  const needingSnapshot = attention.filter(
+    (row) => evidenceStatus(row, coverageProblems) === "missing_snapshot",
+  ).length;
+  const needingCoverage = attention.filter(
+    (row) => evidenceStatus(row, coverageProblems) === "coverage_problem",
+  ).length;
+  const shown = evidenceOnly ? attention : active;
+
   if (accounts.length === 0 && mode === "view") {
     return (
-      <section className="accounts-card accounts-empty" aria-labelledby="accounts-title">
-        <p className="eyebrow">Your money</p>
-        <h1 className="workspace-title" id="accounts-title">Accounts</h1>
-        <div className="accounts-empty-panel">
+      <section className="workspace-content accounts-screen" aria-labelledby="accounts-title">
+        <ConsolePageHeader
+          title="Accounts"
+          description="Balances, evidence state and account roles in one operational view."
+        />
+        <div className="console-empty-focus">
           <h2 id="accounts-empty-title">Add your first account</h2>
           <p>
             An account is a named store of money you own or owe. Start with its opening balance;
             closed accounts remain visible so their history is not lost.
           </p>
-          <Button onClick={openAdd} type="button">Add an account</Button>
+          <div className="console-empty-actions">
+            <Button onClick={openAdd} type="button">Add account</Button>
+          </div>
         </div>
       </section>
     );
   }
 
+  const reportingBase = dashboard ? currency.code === dashboard.netWorth.baseCurrency : true;
+  const reporting = dashboard
+    ? {
+        code: reportingBase ? dashboard.netWorth.baseCurrency : dashboard.netWorth.secondaryCurrency,
+        assets: reportingBase ? dashboard.netWorth.assetsBase : dashboard.netWorth.assetsSecondary,
+        liabilities: reportingBase
+          ? dashboard.netWorth.liabilitiesBase
+          : dashboard.netWorth.liabilitiesSecondary,
+      }
+    : undefined;
+  const assetCount = active.filter((row) => row.accountClass === "asset").length;
+  const liabilityCount = active.filter((row) => row.accountClass === "liability").length;
+  const unavailableDetail = dashboardState === "error"
+    ? "The reporting total could not be loaded"
+    : dashboardState === "loading"
+      ? "Loading the reporting total"
+      : `Not stated in ${currency.code} for this date`;
+
   return (
-    <section className="accounts-card" aria-labelledby="accounts-title">
-      <div className="accounts-heading">
-        <div>
-          <h1 className="workspace-title" id="accounts-title">Accounts</h1>
-          <p className="accounts-summary">
-            {active.length} active {active.length === 1 ? "account" : "accounts"}
-            {latestBalance ? ` · latest balance ${latestBalance}` : ""}
-          </p>
-        </div>
-        {mode === "view" && (
-          <Button onClick={openAdd} type="button">Add an account</Button>
-        )}
-      </div>
+    <section className="workspace-content accounts-screen" aria-labelledby="accounts-title">
+      <ConsolePageHeader
+        title="Accounts"
+        description="Balances, evidence state and account roles in one operational view."
+        actions={mode === "view" ? (
+          <>
+            <Link className={buttonVariants({ variant: "outline" })} href="/import">Import evidence</Link>
+            <Button onClick={openAdd} type="button">Add account</Button>
+          </>
+        ) : undefined}
+      />
+
+      <MetricStrip
+        label="Position summary"
+        items={[
+          {
+            label: "Assets",
+            value: reporting?.assets == null
+              ? "Not available"
+              : moneyText(reporting.assets, reporting.code, currencies),
+            detail: reporting?.assets == null
+              ? unavailableDetail
+              : `Across ${assetCount} ${assetCount === 1 ? "asset account" : "asset accounts"}`,
+          },
+          {
+            label: "Liabilities",
+            value: reporting?.liabilities == null
+              ? "Not available"
+              : moneyText(unsigned(reporting.liabilities), reporting.code, currencies),
+            detail: reporting?.liabilities == null
+              ? unavailableDetail
+              : `Owed across ${liabilityCount} ${liabilityCount === 1 ? "liability account" : "liability accounts"}`,
+          },
+          {
+            label: "Evidence actions",
+            value: attention.length === 0
+              ? "None"
+              : `${attention.length} ${attention.length === 1 ? "account" : "accounts"}`,
+            detail: attention.length === 0
+              ? "Every open account has current evidence"
+              : [
+                  needingConfirmation > 0 ? `${needingConfirmation} opening` : null,
+                  needingSnapshot > 0 ? `${needingSnapshot} snapshot` : null,
+                  needingCoverage > 0 ? `${needingCoverage} coverage` : null,
+                ].filter(Boolean).join(" · "),
+          },
+        ]}
+      />
+
+      {attention.length > 0 && (
+        <AttentionRow
+          tone="attention"
+          title={`${attention.length} ${attention.length === 1 ? "account needs" : "accounts need"} an evidence action`}
+          detail="Confirm an opening balance, record a required valuation, or resolve a named coverage problem."
+          action={
+            <Button onClick={() => setEvidenceOnly((only) => !only)} type="button" variant="outline">
+              {evidenceOnly ? "Show all accounts" : "Show accounts needing evidence"}
+            </Button>
+          }
+        />
+      )}
 
       {problem && mode === "view" && <p className="inline-alert" role="alert">{problem}</p>}
       {(mode === "add" || mode === "edit") && renderForm()}
@@ -924,61 +1125,75 @@ export function AccountsScreen({
             holdUntilRefresh();
             onChanged();
           }}
-          onClose={() => {
-            setMode("view");
-            setValuing(undefined);
-          }}
+          onClose={closeValuation}
           request={request}
         />
       )}
 
-      {groups.map((key) => {
-        const [accountClass, country] = key.split("\0") as ["asset" | "liability", string];
-        const rows = active.filter((row) => row.accountClass === accountClass && row.country === country);
-        const groupTotals = totals.filter((row) => row.accountClass === accountClass && row.country === country);
-        const title = `${accountClass === "asset" ? "Assets" : "Liabilities"} · ${country}`;
-        return (
-          <section className="account-group" key={key}>
-            <div className="account-group-head">
-              <h2>{title}</h2>
-              <p>
-                {groupTotals.map((row, index) => (
-                  <span key={`${row.currency}-${row.total}`}>
-                    {index > 0 ? " · " : ""}
-                    {moneyText(
-                      row.accountClass === "liability" && row.total.startsWith("-")
-                        ? unsigned(row.total)
-                        : row.total,
-                      row.currency,
-                      currencies,
-                    )}
-                    {row.accountClass === "liability" && row.total.startsWith("-") ? " owed" : ""}
-                    {asOfFor(rows, row.currency)}
-                  </span>
-                ))}
-              </p>
-            </div>
-            <table className="account-table">
-              <caption className="visually-hidden">{title}</caption>
-              <AccountTableHead />
-              <tbody className="account-card-grid">{rows.map(renderRow)}</tbody>
+      <div className="console-section-head">
+        <h2 id="accounts-title">Accounts by role</h2>
+        <span>
+          {evidenceOnly
+            ? `${shown.length} of ${active.length} open ${active.length === 1 ? "account" : "accounts"}`
+            : `${active.length} open ${active.length === 1 ? "account" : "accounts"}`}
+          {latestBalance ? ` · latest balance ${latestBalance}` : ""}
+        </span>
+      </div>
+      {shown.length === 0
+        ? <p>No open account matches this view.</p>
+        : renderRoleTable(shown, "Open accounts by role")}
+
+      <details className="console-details">
+        <summary>Grouped native totals</summary>
+        <div className="console-details-body">
+          <p className="console-module-sub">
+            Each group&rsquo;s exact total in its own currency, never converted or combined.
+          </p>
+          <DataTableRegion label="Grouped native totals table">
+            <table className="console-table">
+              <caption className="visually-hidden">Grouped native totals</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Group</th>
+                  <th scope="col">Currency</th>
+                  <th className="console-number" scope="col">Total</th>
+                  <th scope="col">Evidence</th>
+                </tr>
+              </thead>
+              <tbody>
+                {totals.map((row) => {
+                  const rows = active.filter(
+                    (item) => item.accountClass === row.accountClass && item.country === row.country,
+                  );
+                  const owedTotal = row.accountClass === "liability" && row.total.startsWith("-");
+                  return (
+                    <tr key={`${row.accountClass}-${row.country}-${row.currency}-${row.total}`}>
+                      <th scope="row">
+                        {row.accountClass === "asset" ? "Assets" : "Liabilities"} · {row.country}
+                      </th>
+                      <td>{row.currency}</td>
+                      <td className="console-number">
+                        {moneyText(owedTotal ? unsigned(row.total) : row.total, row.currency, currencies)}
+                        {owedTotal ? " owed" : ""}
+                      </td>
+                      <td>{asOfFor(rows, row.currency).replace(/^ as of /, "") || "No shared date"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
             </table>
-          </section>
-        );
-      })}
+          </DataTableRegion>
+        </div>
+      </details>
 
       {closed.length > 0 && (
-        <section className="account-group" aria-labelledby="closed-accounts-title">
-          <div className="account-group-head">
-            <h2 id="closed-accounts-title">Closed accounts</h2>
-            <p>Kept for history and reconciliation</p>
+        <details className="console-details">
+          <summary>Closed accounts ({closed.length})</summary>
+          <div className="console-details-body">
+            <p className="console-module-sub">Kept for history and reconciliation; edit, reopen and evidence stay available.</p>
+            {renderRoleTable(closed, "Closed accounts by role")}
           </div>
-          <table className="account-table">
-            <caption className="visually-hidden">Closed accounts</caption>
-            <AccountTableHead />
-            <tbody className="account-card-grid">{closed.map(renderRow)}</tbody>
-          </table>
-        </section>
+        </details>
       )}
     </section>
   );

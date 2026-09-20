@@ -545,129 +545,13 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
 .auth-shell { display: grid; min-height: 100vh; place-items: center; padding: 24px; }
 .auth-card { width: min(100%, 680px); padding: clamp(30px, 7vw, 70px); border: 1px solid var(--rule); border-top: 4px solid var(--blue); background: rgba(255, 255, 255, 0.92); }
 .auth-card .brand { margin-bottom: clamp(55px, 10vh, 100px); }
-.accounts-card {
-  display: grid;
-  gap: 32px;
-}
-.accounts-heading {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 24px;
-  align-items: end;
-}
-.accounts-heading .workspace-title {
-  margin: 0;
-  font-family: var(--serif);
-  font-size: clamp(2.15rem, 3.2vw, 2.8rem);
-  font-weight: 400;
-  letter-spacing: -0.04em;
-  line-height: 1;
-}
-.accounts-summary {
-  margin: 12px 0 0;
-  color: var(--muted);
-  font-size: 0.82rem;
-}
-.accounts-heading .primary-action,
-.accounts-card .primary-action { justify-self: start; margin-top: 0; }
-.accounts-empty { gap: 0.5rem; }
-.accounts-empty > .workspace-title { margin: 0 0 1rem; font-family: var(--serif); font-size: clamp(2rem, 3.3vw, 3rem); font-weight: 400; letter-spacing: -0.035em; }
-.accounts-empty-panel, .investment-import-prerequisite { display: grid; justify-items: start; gap: 0.8rem; max-width: 700px; padding: clamp(18px, 2.5vw, 28px); border: 1px solid var(--rule); border-radius: var(--radius); background: var(--card); }
-.workspace-grid .accounts-empty-panel h2, .workspace-grid .investment-import-prerequisite h2 { margin: 0; font-family: var(--serif); font-size: clamp(1.3rem, 2vw, 1.65rem); font-weight: 400; }
-.accounts-empty-panel p, .investment-import-prerequisite p { max-width: 60ch; margin: 0; color: var(--muted); font-size: 0.82rem; line-height: 1.55; }
+.investment-import-prerequisite { display: grid; justify-items: start; gap: 0.8rem; max-width: 700px; padding: clamp(18px, 2.5vw, 28px); border: 1px solid var(--rule); border-radius: var(--radius); background: var(--card); }
+.workspace-grid .investment-import-prerequisite h2 { margin: 0; font-family: var(--serif); font-size: clamp(1.3rem, 2vw, 1.65rem); font-weight: 400; }
+.investment-import-prerequisite p { max-width: 60ch; margin: 0; color: var(--muted); font-size: 0.82rem; line-height: 1.55; }
 .investment-import-prerequisite { margin-top: 1.3rem; }
 .investment-import-prerequisite .primary-action { margin-top: 0.2rem; }
-.account-group { display: grid; gap: 12px; }
-.account-group-head {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: baseline;
-}
-.workspace-grid .account-group-head h2 {
-  margin: 0;
-  font-family: var(--mono);
-  font-size: 0.72rem;
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-.account-group-head p {
-  margin: 0;
-  color: var(--muted);
-  font-family: var(--mono);
-  font-size: 0.72rem;
-}
 :is(.account-table, .plans-resources-table) { width: 100%; border-collapse: collapse; }
-.account-group .account-table { display: block; }
-.account-card-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(272px, 1fr));
-  gap: 14px;
-}
-.account-card {
-  display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) auto;
-  grid-template-areas:
-    "mark name actions"
-    "mark detail actions"
-    "balance balance balance"
-    "mask status status"
-    "evidence evidence evidence";
-  align-content: start;
-  min-width: 0;
-  padding: 20px;
-  border: 1px solid var(--rule);
-  border-radius: 9px;
-  background: var(--surface);
-}
-.account-card td {
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  vertical-align: top;
-}
-.account-mark {
-  display: grid;
-  grid-area: mark;
-  width: 30px;
-  height: 30px;
-  place-items: center;
-  border-radius: 6px;
-  color: var(--surface);
-  background: var(--ink);
-  font-family: var(--mono);
-  font-size: 0.67rem;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-}
-.account-card-name { grid-area: name; font-weight: 500; line-height: 1.25; }
-.account-card-detail {
-  grid-area: detail;
-  margin-top: 4px;
-  color: var(--muted);
-  font-size: 0.78rem;
-  line-height: 1.35;
-}
-.account-card-balance {
-  grid-area: balance;
-  margin-top: 22px;
-  font-family: var(--serif);
-  font-size: clamp(1.7rem, 2.4vw, 2.25rem);
-  letter-spacing: -0.035em;
-  line-height: 1.05;
-}
 .account-owed { font-weight: 400; }
-.account-card-mask,
-.account-card-status {
-  margin-top: 8px;
-  color: var(--muted);
-  font-family: var(--mono);
-  font-size: 0.67rem;
-  line-height: 1.4;
-}
-.account-card-mask { grid-area: mask; }
 .account-identifier-list {
   display: grid;
   gap: 8px;
@@ -690,7 +574,7 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
   align-items: center;
 }
 .account-identifier-value { color: var(--ink); }
-.account-card .account-identifier-reveal {
+.console-entity .account-identifier-reveal {
   display: inline-grid;
   width: 24px;
   height: 24px;
@@ -698,7 +582,7 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
   border-radius: 50%;
   color: var(--muted);
 }
-.account-card .account-identifier-reveal:hover:not(:disabled) {
+.console-entity .account-identifier-reveal:hover:not(:disabled) {
   color: var(--green);
   background: rgba(47, 122, 92, 0.08);
   text-decoration: none;
@@ -719,44 +603,12 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
   font-size: 0.67rem;
   line-height: 1.35;
 }
-.account-card-status { grid-area: status; justify-self: end; padding-left: 12px; text-align: right; }
-.account-card-evidence { grid-area: evidence; }
-.account-card-actions { grid-area: actions; }
-.opening-evidence,
-.account-row-actions,
 .account-form-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
   align-items: center;
 }
-.account-card .opening-evidence {
-  gap: 10px;
-  justify-content: space-between;
-  margin-top: 14px;
-  padding: 9px 10px;
-  border-left: 3px solid #a65318;
-  background: #fff4e9;
-  font-size: 0.75rem;
-  line-height: 1.35;
-}
-.account-card .account-row-actions {
-  justify-content: flex-end;
-  gap: 9px;
-  padding-left: 12px;
-}
-.account-card button:not([data-slot="button"]) {
-  padding: 0;
-  border: 0;
-  color: var(--green);
-  background: transparent;
-  cursor: pointer;
-  font-size: 0.76rem;
-  font-weight: 600;
-  text-align: left;
-}
-.account-card button:not([data-slot="button"]):hover { text-decoration: underline; }
-.account-card button:not([data-slot="button"]):disabled { cursor: not-allowed; opacity: 0.48; }
 .account-form {
   display: grid;
   gap: 16px;
@@ -803,7 +655,6 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
   }
 
   .workspace-grid { grid-template-columns: 1fr; gap: 40px; padding: 54px 0; }
-  .accounts-heading,
   .import-controls,
   .import-summary dl,
   .review-row,
@@ -3255,3 +3106,69 @@ body {
   .console-list-row { grid-template-columns: minmax(0, 1fr); }
   .console-list-value { text-align: left; }
 }
+
+/* Phase 4.8 Task 3 — the position family: one compact console table per screen, roles as
+   deterministic separator rows, and low-frequency row actions behind a floating menu. */
+.workspace-content.accounts-screen,
+.workspace-content.wealth-screen { display: flex; flex-direction: column; gap: 22px; max-width: none; }
+
+.console-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.console-section-head h2 { margin: 0; font-size: 16px; font-weight: 650; }
+.console-section-head > span { color: var(--console-muted); font-size: 12px; }
+
+.console-entity { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+.console-entity > div { display: grid; gap: 2px; min-width: 0; }
+.console-entity-mark {
+  display: grid;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 7px;
+  background: var(--console-blue-soft);
+  color: var(--console-blue);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.console-entity-title { overflow-wrap: anywhere; font-weight: 600; }
+.console-entity-sub { color: var(--console-muted); font-size: 11px; overflow-wrap: anywhere; }
+
+.console-table .console-number { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.console-table .console-group-row td {
+  padding: 14px 4px 7px;
+  border-bottom: 1px solid var(--console-line-strong);
+  background: #fff;
+  color: var(--console-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.console-table .console-row-actions { width: 1%; text-align: right; }
+
+.row-actions { position: relative; display: inline-flex; }
+.row-actions-trigger { line-height: 1; }
+.row-actions-content {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 6px);
+  right: 0;
+  display: grid;
+  justify-items: start;
+  gap: 2px;
+  min-width: 13rem;
+  padding: 6px;
+  border: 1px solid var(--console-line-strong);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 16px 40px rgb(20 32 50 / 16%);
+  text-align: left;
+}
+.row-actions-content[hidden] { display: none; }
+.row-actions-content > [data-slot="button"] { width: 100%; justify-content: flex-start; }
+
+.account-identifier-list { margin-top: 4px; }
+.console-entity .account-identifier { gap: 0; }
+.console-entity .account-identifier-kind { font-size: 10px; }
+.console-entity .account-identifier-line { font-size: 11px; }

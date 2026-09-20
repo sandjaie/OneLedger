@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AccountsScreen } from "@/app/accounts/accounts-screen";
 import type { apiFetch } from "@/lib/api/client";
-import type { AccountRow, CurrencyRow, InstitutionRow } from "@/types/api";
+import type { AccountRow, CurrencyRow, DashboardResponse, HouseholdCurrency, InstitutionRow } from "@/types/api";
 
 const currencies: Array<CurrencyRow> = [
   { code: "XAE", name: "Synthetic A", symbol: "A", decimals: 2, numberFormat: "international" },
@@ -17,6 +17,44 @@ const currencies: Array<CurrencyRow> = [
 const institutions: Array<InstitutionRow> = [
   { id: "inst-1", name: "Synthetic Bank", shortName: "SB", country: "XB", institutionType: "bank" },
 ];
+
+const reporting: HouseholdCurrency = { code: "XIN", symbol: "I", decimals: 2, numberFormat: "indian" };
+
+// Accounts reads `/dashboard` for its reporting-pair strip and for the account ids a typed
+// coverage response already names. Every test here is about the rest of the screen, so the
+// wrapper answers that one path and delegates everything else to the test's own mock.
+const dashboardBody = {
+  netWorth: {
+    asOf: "2026-01-15",
+    baseCurrency: "XIN",
+    secondaryCurrency: "XAE",
+    totalBase: "245500.0000",
+    totalSecondary: "11047.5000",
+    assetsBase: "250000.0000",
+    assetsSecondary: "11250.0000",
+    liabilitiesBase: "-4500.0000",
+    liabilitiesSecondary: "-202.5000",
+    liquidBase: "245500.0000",
+    liquidSecondary: "11047.5000",
+    rates: [],
+    missing: [],
+    investmentCoverage: [],
+  },
+} as unknown as DashboardResponse;
+
+/** Opens an account's contextual menu if it is closed, then returns the named action inside it. */
+function rowAction(accountName: string, action: string | RegExp) {
+  const trigger = screen.getByRole("button", { name: `Actions for ${accountName}` });
+  if (trigger.getAttribute("aria-expanded") !== "true") fireEvent.click(trigger);
+  return screen.getByRole("button", { name: action });
+}
+
+function withDashboard(inner: unknown, body: DashboardResponse = dashboardBody): typeof apiFetch {
+  return ((path: string, init?: unknown) =>
+    path === "/dashboard"
+      ? Promise.resolve(body)
+      : (inner as (p: string, i?: unknown) => unknown)(path, init)) as unknown as typeof apiFetch;
+}
 
 function account(overrides: Partial<AccountRow>): AccountRow {
   const { identifiers, ...rest } = overrides;
@@ -97,6 +135,7 @@ const closed = account({
 });
 
 const props = {
+  currency: reporting,
   accounts: [savings, card, closed],
   totals: [
     { accountClass: "asset" as const, country: "XB", currency: "XIN", total: "250000.0000" },
@@ -105,7 +144,7 @@ const props = {
   institutions,
   currencies,
   baseCurrency: "XIN",
-  request: vi.fn() as unknown as typeof apiFetch,
+  request: withDashboard(vi.fn()),
   onChanged: vi.fn(),
 };
 
@@ -119,12 +158,106 @@ describe("Accounts", () => {
     render(<AccountsScreen {...props} accounts={[]} totals={[]} />);
     expect(screen.getByRole("heading", { level: 1, name: "Accounts" })).toBeTruthy();
     expect(screen.getByRole("heading", { level: 2, name: "Add your first account" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Add an account" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add account" })).toBeTruthy();
+  });
+
+  it("states the reporting pair from the dashboard and keeps native totals separate", async () => {
+    render(<AccountsScreen {...props} />);
+
+    const summary = await screen.findByRole("region", { name: "Position summary" });
+    // The reporting-pair strip follows the top-bar currency; XIN is the base here.
+    expect(within(summary).getByText("I 2,50,000.00")).toBeTruthy();
+    expect(within(summary).getByText("Across 1 asset account")).toBeTruthy();
+    expect(within(summary).getByText("I 4,500.00")).toBeTruthy();
+    expect(within(summary).getByText("Owed across 1 liability account")).toBeTruthy();
+    // The grouped subtotals stay in each group's own native currency, never converted.
+    const totals = within(screen.getByRole("region", { name: "Grouped native totals table" }));
+    expect(totals.getByRole("row", { name: /Liabilities · XA/ }).textContent).toContain("A 4,500.00 owed");
+  });
+
+  it("follows the top-bar currency into the reporting strip", async () => {
+    render(
+      <AccountsScreen
+        {...props}
+        currency={{ code: "XAE", symbol: "A", decimals: 2, numberFormat: "international" }}
+      />,
+    );
+
+    const summary = await screen.findByRole("region", { name: "Position summary" });
+    expect(within(summary).getByText("A 11,250.00")).toBeTruthy();
+    expect(within(summary).getByText("A 202.50")).toBeTruthy();
+  });
+
+  it("withholds a reporting total the dashboard could not state, keeping native evidence", async () => {
+    const withheld = {
+      netWorth: {
+        ...dashboardBody.netWorth,
+        assetsBase: null,
+        assetsSecondary: null,
+        liabilitiesBase: null,
+        liabilitiesSecondary: null,
+      },
+    } as unknown as DashboardResponse;
+    render(<AccountsScreen {...props} request={withDashboard(vi.fn(), withheld)} />);
+
+    const summary = await screen.findByRole("region", { name: "Position summary" });
+    expect(within(summary).getAllByText("Not available")).toHaveLength(2);
+    expect(within(summary).getAllByText("Not stated in XIN for this date")).toHaveLength(2);
+    expect(within(summary).queryByText(/2,50,000/)).toBeNull();
+    // The native grouped totals are unaffected: they never needed a rate.
+    expect(within(screen.getByRole("region", { name: "Grouped native totals table" }))
+      .getByRole("row", { name: /Assets · XB/ }).textContent).toContain("I 2,50,000.00");
+  });
+
+  it("counts the accounts needing an evidence action and filters to exactly those", async () => {
+    const unvalued = account({ ...retirementNoSnapshot, openingBalanceConfirmedAt: "2024-01-01T00:00:00Z" });
+    render(<AccountsScreen {...props} accounts={[savings, unvalued, card]} />);
+
+    const summary = await screen.findByRole("region", { name: "Position summary" });
+    expect(within(summary).getByText("2 accounts")).toBeTruthy();
+    expect(within(summary).getByText("1 opening · 1 snapshot")).toBeTruthy();
+
+    const attention = screen.getByRole("region", { name: "2 accounts need an evidence action" });
+    fireEvent.click(within(attention).getByRole("button", { name: "Show accounts needing evidence" }));
+
+    expect(screen.getByText(/^2 of 3 open accounts/)).toBeTruthy();
+    const table = within(screen.getByRole("region", { name: "Open accounts by role table" }));
+    expect(table.getByRole("row", { name: /Inventory Savings/ })).toBeTruthy();
+    expect(table.getByRole("row", { name: /Inventory Retirement/ })).toBeTruthy();
+    expect(table.queryByRole("row", { name: /Inventory Card/ })).toBeNull();
+  });
+
+  it("names a typed coverage problem the dashboard already reported", async () => {
+    const flagged = {
+      netWorth: {
+        ...dashboardBody.netWorth,
+        investmentCoverage: [
+          { accountId: "acct-card", holdingId: null, valuationMode: "snapshot", status: "stale_price", valueDate: "2025-01-01", carried: true, ageDays: 400, method: null, confidence: null },
+        ],
+      },
+    } as unknown as DashboardResponse;
+    render(<AccountsScreen {...props} request={withDashboard(vi.fn(), flagged)} />);
+
+    await screen.findByRole("region", { name: "Position summary" });
+    expect(within(screen.getByRole("row", { name: /Inventory Card/ })).getByText("Coverage problem")).toBeTruthy();
+  });
+
+  it("keeps a long account label from displacing its amount or its actions", () => {
+    const long = account({
+      id: "acct-long",
+      name: "A deliberately long synthetic account label that must not displace the aligned amount",
+      openingBalanceConfirmedAt: "2024-01-01T00:00:00Z",
+    });
+    render(<AccountsScreen {...props} accounts={[long]} totals={[]} />);
+
+    const row = within(screen.getByRole("row", { name: /deliberately long synthetic account label/ }));
+    expect(row.getByLabelText(/balance I 2,50,000\.00$/)).toBeTruthy();
+    expect(row.getByRole("button", { name: `Actions for ${long.name}` })).toBeTruthy();
   });
 
   it("keeps identifiers masked and never prefetches a reveal", () => {
     const request = vi.fn();
-    render(<AccountsScreen {...props} request={request} />);
+    render(<AccountsScreen {...props} request={withDashboard(request)} />);
 
     expect(screen.getAllByText("****1234").length).toBeGreaterThan(0);
     expect(screen.queryByText("SYN 0000 1234")).toBeNull();
@@ -137,7 +270,7 @@ describe("Accounts", () => {
       value: "SYN 0000 1234",
       kind: "bank_account",
     });
-    render(<AccountsScreen {...props} accounts={[savings]} request={request} totals={[]} />);
+    render(<AccountsScreen {...props} accounts={[savings]} request={withDashboard(request)} totals={[]} />);
     const show = screen.getByRole("button", {
       name: "Show bank account number for Inventory Savings",
     });
@@ -184,7 +317,7 @@ describe("Accounts", () => {
       value: "SYN 0000 1234",
       kind: "bank_account",
     });
-    render(<AccountsScreen {...props} accounts={[accountWithIban]} request={request} totals={[]} />);
+    render(<AccountsScreen {...props} accounts={[accountWithIban]} request={withDashboard(request)} totals={[]} />);
 
     fireEvent.click(screen.getByRole("button", {
       name: "Show bank account number for Inventory Savings",
@@ -192,7 +325,7 @@ describe("Accounts", () => {
 
     expect(await screen.findByText("SYN 0000 1234")).toBeTruthy();
     expect(screen.getByText("****5678")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Edit Inventory Savings" }));
+    fireEvent.click(rowAction("Inventory Savings", "Edit Inventory Savings"));
     expect(screen.queryByText("SYN 0000 1234")).toBeNull();
   });
 
@@ -201,7 +334,7 @@ describe("Accounts", () => {
     const request = vi.fn().mockImplementation(() => new Promise((resolve) => {
       finishReveal = resolve;
     }));
-    render(<AccountsScreen {...props} accounts={[savings]} request={request} totals={[]} />);
+    render(<AccountsScreen {...props} accounts={[savings]} request={withDashboard(request)} totals={[]} />);
 
     fireEvent.click(screen.getByRole("button", {
       name: "Show bank account number for Inventory Savings",
@@ -209,7 +342,7 @@ describe("Accounts", () => {
     const init = request.mock.calls[0]?.[1] as RequestInit;
     expect(init.signal?.aborted).toBe(false);
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit Inventory Savings" }));
+    fireEvent.click(rowAction("Inventory Savings", "Edit Inventory Savings"));
     expect(init.signal?.aborted).toBe(true);
     finishReveal?.({ status: "revealed", value: "SYN 0000 1234", kind: "bank_account" });
 
@@ -231,7 +364,7 @@ describe("Accounts", () => {
       .mockResolvedValueOnce({ status: "unavailable", reason: "source_mask_only" })
       .mockRejectedValueOnce(new Error("synthetic failure"));
     const { rerender } = render(
-      <AccountsScreen {...props} accounts={[savings]} request={request} totals={[]} />,
+      <AccountsScreen {...props} accounts={[savings]} request={withDashboard(request)} totals={[]} />,
     );
     fireEvent.click(screen.getByRole("button", {
       name: "Show bank account number for Inventory Savings",
@@ -246,7 +379,7 @@ describe("Accounts", () => {
           ...savings.identifiers[0],
           id: "identifier-retry",
         }] })]}
-        request={request}
+        request={withDashboard(request)}
         totals={[]}
       />,
     );
@@ -269,7 +402,7 @@ describe("Accounts", () => {
       kind: "bank_account",
     });
     const view = render(
-      <AccountsScreen {...props} accounts={[savings]} request={request} totals={[]} />,
+      <AccountsScreen {...props} accounts={[savings]} request={withDashboard(request)} totals={[]} />,
     );
 
     fireEvent.click(screen.getByRole("button", {
@@ -283,15 +416,16 @@ describe("Accounts", () => {
     expect(screen.queryByText("SYN 0000 1234")).toBeNull();
   });
 
-  it("presents the inventory as the compact account-card grid from the primary artboard", () => {
+  it("presents the inventory as the approved compact console table", () => {
     render(<AccountsScreen {...props} />);
 
     expect(screen.getByRole("heading", { level: 1, name: "Accounts" })).toBeTruthy();
-    expect(screen.getByText("2 active accounts · latest balance 15 Jan 2026")).toBeTruthy();
-
-    const assetGroup = screen.getByRole("heading", { name: "Assets · XB" }).closest(".account-group");
-    expect(assetGroup?.querySelector("tbody")?.classList.contains("account-card-grid")).toBe(true);
-    expect(assetGroup?.querySelector("tbody tr")?.classList.contains("account-card")).toBe(true);
+    expect(screen.getByText("2 open accounts · latest balance 15 Jan 2026")).toBeTruthy();
+    // Page actions, not a heading-level call to action.
+    expect(screen.getByRole("link", { name: "Import evidence" })).toHaveProperty("pathname", "/import");
+    expect(screen.getByRole("button", { name: "Add account" })).toBeTruthy();
+    // The wide table scrolls only inside its own named region.
+    expect(screen.getByRole("region", { name: "Open accounts by role table" })).toBeTruthy();
   });
 
   it("labels the newest balance date without implying that every account was synced", () => {
@@ -309,20 +443,43 @@ describe("Accounts", () => {
       />,
     );
 
-    expect(screen.getByText("2 active accounts · latest balance 15 Jan 2026")).toBeTruthy();
+    expect(screen.getByText("2 open accounts · latest balance 15 Jan 2026")).toBeTruthy();
     expect(screen.queryByText(/last synced/i)).toBeNull();
   });
 
-  it("scopes the card-table display override to account groups", () => {
+  it("leaves no card-grid override behind the console table", () => {
     const css = readFileSync(`${process.cwd()}/app/globals.css`, "utf8");
-    expect(css).not.toMatch(/(?:^|\n)\.account-table\s*\{\s*display:\s*block/);
-    expect(css).toMatch(/\.account-group \.account-table\s*\{\s*display:\s*block/);
+    // The rejected editorial inventory turned the table into a card grid; the console does not.
+    expect(css).not.toMatch(/\.account-table\s*\{[^}]*display:\s*block/);
+    expect(css).not.toMatch(/\.account-card-grid/);
   });
 
-  it("groups by class then country, as UI §6 specifies over the artboard", () => {
-    render(<AccountsScreen {...props} />);
-    expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent))
-      .toEqual(["Assets · XB", "Liabilities · XA", "Closed accounts"]);
+  it("groups open accounts by the specification's display roles, in its own order", () => {
+    render(
+      <AccountsScreen
+        {...props}
+        accounts={[
+          card,
+          account({ id: "acct-prop", name: "Inventory Property", accountType: "property", openingBalanceConfirmedAt: "2024-01-01T00:00:00Z", valuationMode: "snapshot", latestValuationDate: "2026-01-10" }),
+          savings,
+          account({ id: "acct-cash", name: "Inventory Cash", accountType: "cash", openingBalanceConfirmedAt: "2024-01-01T00:00:00Z" }),
+          account({ id: "acct-loan", name: "Inventory Loan", accountType: "home_loan", accountClass: "liability", currentBalance: "-1000.0000", openingBalanceConfirmedAt: "2024-01-01T00:00:00Z" }),
+        ]}
+      />,
+    );
+    const table = within(screen.getByRole("region", { name: "Open accounts by role table" }));
+    const groups = table.getAllByRole("row")
+      .map((row) => row.textContent ?? "")
+      .filter((text) => / · \d+ accounts?$/.test(text));
+    expect(groups).toEqual([
+      "Everyday · 1 account",
+      "Reserve · 1 account",
+      "Property · 1 account",
+      "Credit · 1 account",
+      "Loan · 1 account",
+    ]);
+    expect(within(screen.getByRole("region", { name: "Open accounts by role table" }))
+      .queryAllByRole("heading")).toHaveLength(0);
   });
 
   it("shows a native balance formatted by its own currency row", () => {
@@ -333,16 +490,25 @@ describe("Accounts", () => {
     expect(screen.getByLabelText("Inventory Card balance You owe A 4,500.00")).toBeTruthy();
   });
 
-  it("keeps closed accounts visible with their closing date", () => {
+  it("discloses closed accounts without losing their closing date", () => {
     render(<AccountsScreen {...props} />);
-    expect(screen.getByRole("heading", { name: "Closed accounts" })).toBeTruthy();
+    expect(screen.getByText("Closed accounts (1)")).toBeTruthy();
     const closedRow = screen.getByRole("row", { name: /Old Savings/ });
     expect(closedRow.textContent).toContain("Closed 30 Jun 2026");
   });
 
-  it("marks an unacknowledged opening balance as stated, not verified", () => {
-    render(<AccountsScreen {...props} />);
-    expect(screen.getByText("Opening balance not acknowledged")).toBeTruthy();
+  it("states each evidence status without inventing an age threshold", () => {
+    const unvalued = account({ ...retirementNoSnapshot, openingBalanceConfirmedAt: "2024-01-01T00:00:00Z" });
+    render(<AccountsScreen {...props} accounts={[savings, unvalued, card]} />);
+    // An unacknowledged opening outranks everything; a snapshot account with no valuation is
+    // missing one; the card is old but current, because nothing typed says otherwise.
+    expect(within(screen.getByRole("row", { name: /Inventory Savings/ })).getByText("Needs confirmation")).toBeTruthy();
+    expect(within(screen.getByRole("row", { name: /Inventory Retirement/ })).getByText("Missing snapshot")).toBeTruthy();
+    expect(within(screen.getByRole("row", { name: /Inventory Card/ })).getByText("Current")).toBeTruthy();
+    expect(screen.queryByText(/stale/i)).toBeNull();
+    // A snapshot account with no valuation states that, rather than its placeholder balance.
+    expect(within(screen.getByRole("row", { name: /Inventory Retirement/ })).getByText("Not available")).toBeTruthy();
+    expect(screen.getByLabelText("Inventory Retirement balance Not available")).toBeTruthy();
   });
 
   it("teaches rather than showing a blank table when there are no accounts", () => {
@@ -352,7 +518,7 @@ describe("Accounts", () => {
 
   it("offers every catalogue currency and every institution when adding an account", () => {
     render(<AccountsScreen {...props} />);
-    fireEvent.click(screen.getByRole("button", { name: "Add an account" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add account" }));
     expect(screen.getByRole("heading", { level: 2, name: "New account" })).toBeTruthy();
     const currency = screen.getByLabelText("Currency") as HTMLSelectElement;
     expect([...currency.options].map((o) => o.value)).toEqual(["XAE", "XIN", "XZZ"]);
@@ -362,7 +528,7 @@ describe("Accounts", () => {
 
   it("uses Nova controls for the account entry path", () => {
     render(<AccountsScreen {...props} />);
-    const add = screen.getByRole("button", { name: "Add an account" });
+    const add = screen.getByRole("button", { name: "Add account" });
     expect(add.getAttribute("data-slot")).toBe("button");
     fireEvent.click(add);
     expect(screen.getByLabelText("Account name").getAttribute("data-slot")).toBe("input");
@@ -372,7 +538,7 @@ describe("Accounts", () => {
 
   it("offers every database-supported institution type", () => {
     render(<AccountsScreen {...props} />);
-    fireEvent.click(screen.getByRole("button", { name: "Add an account" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add account" }));
     fireEvent.click(screen.getByRole("button", { name: /add institution/i }));
     const type = screen.getByLabelText("Institution type") as HTMLSelectElement;
     expect([...type.options].map((option) => option.value)).toEqual([
@@ -391,7 +557,7 @@ describe("Accounts", () => {
 
   it("lets the owner correct type, currency, country and the opening anchor", () => {
     render(<AccountsScreen {...props} />);
-    fireEvent.click(screen.getByRole("button", { name: /edit inventory savings/i }));
+    fireEvent.click(rowAction("Inventory Savings", /edit inventory savings/i));
     expect(screen.getByLabelText("Account type")).toBeTruthy();
     expect(screen.getByLabelText("Currency")).toBeTruthy();
     expect(screen.getByLabelText("Country")).toBeTruthy();
@@ -402,7 +568,7 @@ describe("Accounts", () => {
 
   it("requires a credit limit when the type is a credit card", () => {
     render(<AccountsScreen {...props} />);
-    fireEvent.click(screen.getByRole("button", { name: "Add an account" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add account" }));
     const limit = screen.getByLabelText("Credit limit") as HTMLInputElement;
     expect(limit.required).toBe(false);
     fireEvent.change(screen.getByLabelText("Account type"), { target: { value: "credit_card" } });
@@ -411,38 +577,16 @@ describe("Accounts", () => {
 
   it("names every account-table column for screen-reader navigation", () => {
     render(<AccountsScreen {...props} />);
-    expect(screen.getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
-      "Institution",
-      "Account",
-      "Detail",
-      "Masked number",
-      "Balance",
-      "Status",
-      "Evidence",
-      "Actions",
-      "Institution",
-      "Account",
-      "Detail",
-      "Masked number",
-      "Balance",
-      "Status",
-      "Evidence",
-      "Actions",
-      "Institution",
-      "Account",
-      "Detail",
-      "Masked number",
-      "Balance",
-      "Status",
-      "Evidence",
-      "Actions",
+    const table = within(screen.getByRole("region", { name: "Open accounts by role table" }));
+    expect(table.getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
+      "Account", "Role", "Currency", "Evidence", "Status", "Balance", "Actions",
     ]);
   });
 
   it("sends the opening balance as a decimal string", async () => {
     const request = vi.fn().mockResolvedValue(props.accounts[0]);
-    render(<AccountsScreen {...props} request={request} />);
-    fireEvent.click(screen.getByRole("button", { name: "Add an account" }));
+    render(<AccountsScreen {...props} request={withDashboard(request)} />);
+    fireEvent.click(screen.getByRole("button", { name: "Add account" }));
     fireEvent.change(screen.getByLabelText("Account name"), { target: { value: "New" } });
     fireEvent.change(screen.getByLabelText("Opening balance"), { target: { value: "1234.50" } });
     fireEvent.change(screen.getByLabelText("Opening balance date"),
@@ -456,8 +600,8 @@ describe("Accounts", () => {
 
   it("sends a liability opening as a negative decimal string", async () => {
     const request = vi.fn().mockResolvedValue(props.accounts[1]);
-    render(<AccountsScreen {...props} request={request} />);
-    fireEvent.click(screen.getByRole("button", { name: "Add an account" }));
+    render(<AccountsScreen {...props} request={withDashboard(request)} />);
+    fireEvent.click(screen.getByRole("button", { name: "Add account" }));
     fireEvent.change(screen.getByLabelText("Account name"), { target: { value: "Card" } });
     fireEvent.change(screen.getByLabelText("Account type"), { target: { value: "credit_card" } });
     fireEvent.change(screen.getByLabelText("Amount owed"), { target: { value: "4500.00" } });
@@ -472,8 +616,8 @@ describe("Accounts", () => {
 
   it("keeps a signed opening when a liability is reclassified as an asset", async () => {
     const request = vi.fn().mockResolvedValue(card);
-    render(<AccountsScreen {...props} request={request} />);
-    fireEvent.click(screen.getByRole("button", { name: "Edit Inventory Card" }));
+    render(<AccountsScreen {...props} request={withDashboard(request)} />);
+    fireEvent.click(rowAction("Inventory Card", "Edit Inventory Card"));
     expect((screen.getByLabelText("Amount owed") as HTMLInputElement).value).toBe("4500.0000");
     fireEvent.change(screen.getByLabelText("Account type"), { target: { value: "current" } });
     fireEvent.click(screen.getByRole("button", { name: "Save account" }));
@@ -484,20 +628,37 @@ describe("Accounts", () => {
 
   it("keeps edit and reopen on a closed account", () => {
     render(<AccountsScreen {...props} />);
-    expect(screen.getByRole("button", { name: /edit old savings/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /reopen/i })).toBeTruthy();
+    expect(rowAction("Old Savings", /edit old savings/i)).toBeTruthy();
+    expect(rowAction("Old Savings", "Reopen Old Savings")).toBeTruthy();
   });
 
-  it("names acknowledge after the account it confirms", () => {
+  it("names acknowledge after the account it confirms, and offers it only where it applies", () => {
     render(<AccountsScreen {...props} />);
-    expect(screen.getByRole("button", { name: "Acknowledge Inventory Savings" })).toBeTruthy();
+    expect(rowAction("Inventory Savings", "Acknowledge Inventory Savings")).toBeTruthy();
+    // The card's opening is already acknowledged, so its menu does not offer the action.
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Inventory Card" }));
+    expect(screen.queryByRole("button", { name: "Acknowledge Inventory Card" })).toBeNull();
   });
 
   it("names close and reopen after the account they mutate", () => {
     render(<AccountsScreen {...props} />);
-    expect(screen.getByRole("button", { name: "Close Inventory Savings" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Close Inventory Card" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Reopen Old Savings" })).toBeTruthy();
+    expect(rowAction("Inventory Savings", "Close Inventory Savings")).toBeTruthy();
+    expect(rowAction("Inventory Card", "Close Inventory Card")).toBeTruthy();
+    expect(rowAction("Old Savings", "Reopen Old Savings")).toBeTruthy();
+  });
+
+  it("returns focus to the row action that opened a contextual menu", () => {
+    render(<AccountsScreen {...props} />);
+    const trigger = screen.getByRole("button", { name: "Actions for Inventory Savings" });
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "Enter" });
+
+    const region = screen.getByRole("region", { name: "Actions for Inventory Savings" });
+    within(region).getByRole("button", { name: "Edit Inventory Savings" }).focus();
+    fireEvent.keyDown(region, { key: "Escape" });
+
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(trigger);
   });
 
   it("keeps the minus on a negative asset subtotal", () => {
@@ -510,11 +671,11 @@ describe("Accounts", () => {
         ]}
       />,
     );
-    const assets = screen.getByRole("heading", { name: "Assets · XB" }).closest(".account-group-head");
-    expect(assets?.textContent).toContain("-I 2,50,000.00");
-    const liabilities = screen.getByRole("heading", { name: "Liabilities · XA" }).closest(".account-group-head");
-    expect(liabilities?.textContent).toContain("A 4,500.00 owed");
-    expect(liabilities?.textContent).not.toContain("-A");
+    const totals = within(screen.getByRole("region", { name: "Grouped native totals table" }));
+    expect(totals.getByRole("row", { name: /Assets · XB/ }).textContent).toContain("-I 2,50,000.00");
+    const liabilities = totals.getByRole("row", { name: /Liabilities · XA/ });
+    expect(liabilities.textContent).toContain("A 4,500.00 owed");
+    expect(liabilities.textContent).not.toContain("-A");
   });
 
   it("separates native subtotals when a group has more than one currency", () => {
@@ -527,8 +688,13 @@ describe("Accounts", () => {
         ]}
       />,
     );
-    const head = screen.getByRole("heading", { name: "Assets · XB" }).closest(".account-group-head");
-    expect(head?.textContent).toContain("I 2,50,000.00 as of 15 Jan 2026 · A 1,000.00");
+    const totals = within(screen.getByRole("region", { name: "Grouped native totals table" }));
+    // One row per currency: the exact native totals are never combined into one figure.
+    expect(totals.getByRole("row", { name: /Assets · XB XIN/ }).textContent)
+      .toContain("I 2,50,000.00");
+    expect(totals.getByRole("row", { name: /Assets · XB XAE/ }).textContent)
+      .toContain("A 1,000.00");
+    expect(totals.getByRole("row", { name: /Assets · XB XIN/ }).textContent).toContain("15 Jan 2026");
   });
 
   it("submits an owner-entered complete identifier only as accountNumber", async () => {
@@ -540,10 +706,10 @@ describe("Accounts", () => {
     render(
       <AccountsScreen
         {...props}
-        request={request as unknown as typeof props.request}
+        request={withDashboard(request)}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Add an account" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add account" }));
     fireEvent.change(screen.getByLabelText("Account name"), { target: { value: "New" } });
     fireEvent.change(screen.getByLabelText("Account or card number"), {
       target: { value: "4111 1111 1111 1111" },
@@ -560,29 +726,29 @@ describe("Accounts", () => {
 
   it("disables edit while a row mutation is pending", async () => {
     const request = vi.fn(() => new Promise(() => undefined));
-    render(<AccountsScreen {...props} request={request as unknown as typeof props.request} />);
-    fireEvent.click(screen.getByRole("button", { name: "Acknowledge Inventory Savings" }));
+    render(<AccountsScreen {...props} request={withDashboard(request)} />);
+    fireEvent.click(rowAction("Inventory Savings", "Acknowledge Inventory Savings"));
     await waitFor(() => expect(request).toHaveBeenCalled());
-    expect((screen.getByRole("button", { name: "Edit Inventory Savings" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((rowAction("Inventory Savings", "Edit Inventory Savings") as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("keeps row actions disabled until the inventory refreshes", async () => {
     const request = vi.fn().mockResolvedValue(savings);
-    const { rerender } = render(<AccountsScreen {...props} request={request} />);
-    fireEvent.click(screen.getByRole("button", { name: "Acknowledge Inventory Savings" }));
+    const { rerender } = render(<AccountsScreen {...props} request={withDashboard(request)} />);
+    fireEvent.click(rowAction("Inventory Savings", "Acknowledge Inventory Savings"));
     await waitFor(() => expect(request).toHaveBeenCalled());
     await waitFor(() => expect(props.onChanged).toHaveBeenCalled());
-    expect((screen.getByRole("button", { name: "Edit Inventory Savings" }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole("button", { name: "Acknowledge Inventory Savings" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((rowAction("Inventory Savings", "Edit Inventory Savings") as HTMLButtonElement).disabled).toBe(true);
+    expect((rowAction("Inventory Savings", "Acknowledge Inventory Savings") as HTMLButtonElement).disabled).toBe(true);
     rerender(
       <AccountsScreen
         {...props}
-        request={request}
+        request={withDashboard(request)}
         accounts={[account({ openingBalanceConfirmedAt: "2026-01-01T00:00:00Z" }), card, closed]}
       />,
     );
     await waitFor(() => {
-      expect((screen.getByRole("button", { name: "Edit Inventory Savings" }) as HTMLButtonElement).disabled).toBe(false);
+      expect((rowAction("Inventory Savings", "Edit Inventory Savings") as HTMLButtonElement).disabled).toBe(false);
     });
   });
 
@@ -599,9 +765,10 @@ describe("Accounts", () => {
       />,
     );
     expect(screen.getByLabelText("Inventory Card balance A 250.00")).toBeTruthy();
-    const head = screen.getByRole("heading", { name: "Liabilities · XA" }).closest(".account-group-head");
-    expect(head?.textContent).toContain("A 250.00");
-    expect(head?.textContent).not.toContain("owed");
+    const row = within(screen.getByRole("region", { name: "Grouped native totals table" }))
+      .getByRole("row", { name: /Liabilities · XA/ });
+    expect(row.textContent).toContain("A 250.00");
+    expect(row.textContent).not.toContain("owed");
   });
 
   it("omits the subtotal date when an included account has none", () => {
@@ -615,9 +782,10 @@ describe("Accounts", () => {
         totals={[{ accountClass: "asset", country: "XB", currency: "XIN", total: "250100.0000" }]}
       />,
     );
-    const head = screen.getByRole("heading", { name: "Assets · XB" }).closest(".account-group-head");
-    expect(head?.textContent).toContain("I 2,50,100.00");
-    expect(head?.textContent).not.toContain("as of");
+    const row = within(screen.getByRole("region", { name: "Grouped native totals table" }))
+      .getByRole("row", { name: /Assets · XB/ });
+    expect(row.textContent).toContain("I 2,50,100.00");
+    expect(row.textContent).toContain("No shared date");
   });
 
   it("marks an account that is excluded from group totals", () => {
@@ -636,9 +804,7 @@ describe("Accounts", () => {
     expect(screen.getByRole("row", { name: /Inventory Retirement/ }).textContent).toContain(
       "Dated valuation",
     );
-    expect(
-      screen.getByRole("button", { name: "Add valuation for Inventory Retirement" }),
-    ).toBeTruthy();
+    expect(rowAction("Inventory Retirement", "Add valuation for Inventory Retirement")).toBeTruthy();
   });
 
   it("opens the valuation panel for a ?valuation= account id from the overview's coverage link", async () => {
@@ -654,13 +820,42 @@ describe("Accounts", () => {
       <AccountsScreen
         {...props}
         accounts={[retirementNoSnapshot]}
-        request={request as unknown as typeof apiFetch}
+        request={withDashboard(request)}
         totals={[]}
       />,
     );
 
     expect(await screen.findByRole("heading", { name: "Valuation — Inventory Retirement" })).toBeTruthy();
     window.history.replaceState(null, "", "/accounts");
+  });
+
+  it("returns focus to the row action that opened the valuation panel", async () => {
+    const request = vi.fn().mockResolvedValue({
+      accountId: "acct-retirement",
+      currentMode: "snapshot",
+      currentEffectiveFrom: "2026-01-01",
+      periods: [{ id: "period-1", valuationMode: "snapshot", effectiveFrom: "2026-01-01", effectiveTo: null }],
+      snapshots: [],
+    });
+    render(
+      <AccountsScreen
+        {...props}
+        accounts={[retirementNoSnapshot]}
+        request={withDashboard(request)}
+        totals={[]}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Actions for Inventory Retirement" });
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole("button", { name: "Add valuation for Inventory Retirement" }));
+    expect(await screen.findByRole("heading", { name: "Valuation — Inventory Retirement" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: "Actions for Inventory Retirement" }),
+    ));
+    expect(screen.queryByRole("heading", { name: /^Valuation/ })).toBeNull();
   });
 
   it("ignores a ?valuation= id that is not an active asset account", () => {
@@ -673,8 +868,8 @@ describe("Accounts", () => {
 
   it("drops a leftover credit limit when the type is not a card", async () => {
     const request = vi.fn().mockResolvedValue(props.accounts[0]);
-    render(<AccountsScreen {...props} request={request} />);
-    fireEvent.click(screen.getByRole("button", { name: "Add an account" }));
+    render(<AccountsScreen {...props} request={withDashboard(request)} />);
+    fireEvent.click(screen.getByRole("button", { name: "Add account" }));
     fireEvent.change(screen.getByLabelText("Account name"), { target: { value: "New" } });
     fireEvent.change(screen.getByLabelText("Credit limit"), { target: { value: "20000.00" } });
     fireEvent.change(screen.getByLabelText("Opening balance"), { target: { value: "10.00" } });

@@ -27,6 +27,45 @@ describe("RowActions", () => {
     expect(screen.getByRole("region", { name: "Review record actions" }).getAttribute("id")).toBe("record-actions");
   });
 
+  it("floats its panel over the row instead of expanding it, and names an icon trigger", () => {
+    render(
+      <RowActions label="Actions for Synthetic record" triggerContent="⋯">
+        <button type="button">Rename record</button>
+      </RowActions>,
+    );
+
+    // An icon-only trigger still carries the full accessible name.
+    const trigger = screen.getByRole("button", { name: "Actions for Synthetic record" });
+    expect(trigger.textContent).toBe("⋯");
+    fireEvent.click(trigger);
+    // Absolute, so opening one row's actions cannot push the rows below it down.
+    const panel = screen.getByRole("region", { name: "Actions for Synthetic record" });
+    expect(panel.classList.contains("row-actions-content")).toBe(true);
+    expect(panel.closest(".row-actions")).toBeTruthy();
+  });
+
+  it("closes on a click outside without stealing focus from where the owner clicked", () => {
+    render(
+      <div>
+        <RowActions label="Review record actions">
+          <button type="button">Rename record</button>
+        </RowActions>
+        <button type="button">Elsewhere</button>
+      </div>,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Review record actions" });
+    fireEvent.click(trigger);
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+
+    const elsewhere = screen.getByRole("button", { name: "Elsewhere" });
+    elsewhere.focus();
+    fireEvent.mouseDown(elsewhere);
+
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(elsewhere);
+  });
+
   it("keeps enclosed controls operable and returns focus when keyboard close is requested", () => {
     const rename = vi.fn();
     render(

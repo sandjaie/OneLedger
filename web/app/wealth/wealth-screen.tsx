@@ -3,7 +3,11 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
+import { ConsolePageHeader } from "@/app/ui/console-page-header";
+import { DataTableRegion } from "@/app/ui/data-table-region";
 import { EvidenceChart } from "@/app/ui/evidence-chart";
+import { MetricStrip } from "@/app/ui/metric-strip";
+import { StatusLabel } from "@/app/ui/status-label";
 import { Button } from "@/components/ui/button";
 import { errorText, LONG_REQUEST_TIMEOUT_MS, type apiFetch } from "@/lib/api/client";
 import { moneyText } from "@/lib/money/format";
@@ -178,33 +182,68 @@ export function WealthScreen({ currency, currencies, request }: Props) {
     void loadWaterfall(monthEnd, token);
   }
 
+  const months = history?.months ?? [];
+  const complete = months.filter((row) => row.complete);
+  const latestComplete = complete[complete.length - 1];
+  const latestTotal = latestComplete && history ? monthTotal(latestComplete, history, currency) : null;
+  const lastRefreshed = months.length > 0
+    ? months.reduce((latest, row) => (row.computedAt > latest ? row.computedAt : latest), months[0].computedAt)
+    : null;
+
   return (
     <section aria-labelledby="wealth-title" className="workspace-content wealth-screen">
-      <header className="page-head">
-        <p className="eyebrow">Stored month-end evidence</p>
-        <h1 className="workspace-title" id="wealth-title">Wealth</h1>
-        <p>Follow recorded month-end net worth and investigate any gap before trusting a trend.</p>
-        <Button
-          disabled={refreshing}
-          onClick={() => void refresh()}
-          type="button"
-        >{refreshing ? "Refreshing…" : "Refresh history"}</Button>
-        {refreshCounts && (
-          <p className="page-status" role="status">
-            Refreshed {refreshCounts.monthsComputed} {refreshCounts.monthsComputed === 1 ? "month" : "months"},{" "}
-            {refreshCounts.positionsComputed} {refreshCounts.positionsComputed === 1 ? "position" : "positions"}.
-          </p>
-        )}
-        {problem && <p className="page-status" role="alert">{problem}</p>}
-        {state === "ready" && history && history.months.length > 0 && <details className="experience-disclosure">
-          <summary>How this history is stored</summary>
-          <p>Each account&rsquo;s evidence date and translation rate are stored so past figures remain reproducible. Last refreshed {new Date(history.months.reduce((latest, row) => (row.computedAt > latest ? row.computedAt : latest), history.months[0].computedAt)).toLocaleString()}.</p>
-        </details>}
-      </header>
+      <ConsolePageHeader
+        title="Wealth"
+        description="Recorded month-end net position, and the evidence behind any gap."
+        actions={
+          <Button
+            disabled={refreshing}
+            onClick={() => void refresh()}
+            type="button"
+          >{refreshing ? "Refreshing…" : "Refresh history"}</Button>
+        }
+      />
+      <h1 className="visually-hidden" id="wealth-title">Wealth</h1>
+      {refreshCounts && (
+        <p className="page-status" role="status">
+          Refreshed {refreshCounts.monthsComputed} {refreshCounts.monthsComputed === 1 ? "month" : "months"},{" "}
+          {refreshCounts.positionsComputed} {refreshCounts.positionsComputed === 1 ? "position" : "positions"}.
+        </p>
+      )}
+      {problem && <p className="inline-alert" role="alert">{problem}</p>}
 
-      {state === "loading" && <p className="loading-frame" role="status">Loading wealth history…</p>}
+      {state === "ready" && history && months.length > 0 && (
+        <MetricStrip
+          label="Stored history summary"
+          items={[
+            {
+              label: "Latest complete month",
+              value: latestTotal === null || latestTotal === undefined
+                ? "Not available"
+                : moneyText(latestTotal, currency.code, currencies),
+              detail: latestComplete
+                ? `${latestComplete.monthEnd} · in ${currency.code}`
+                : "No stored month has complete values yet",
+            },
+            {
+              label: "Completeness",
+              value: `${complete.length} of ${months.length}`,
+              detail: firstIncomplete
+                ? `Earliest incomplete month ${firstIncomplete.monthEnd}`
+                : "Every stored month has complete values",
+            },
+            {
+              label: "Last refreshed",
+              value: lastRefreshed ? new Date(lastRefreshed).toLocaleString() : "Never",
+              detail: refreshing ? "Refreshing now" : "Stored evidence dates and rates are kept",
+            },
+          ]}
+        />
+      )}
+
+      {state === "loading" && <p role="status">Loading wealth history…</p>}
       {state === "error" && (
-        <div className="page-status" role="alert">
+        <div className="inline-alert" role="alert">
           <p>Wealth history could not be loaded.</p>
           <Button
             variant="outline"
@@ -216,19 +255,24 @@ export function WealthScreen({ currency, currencies, request }: Props) {
 
       {state === "ready" && history && (
         <>
-          {history.months.length > 0 && <div className="wealth-evidence-summary">
-            <span>{history.months.filter((row) => row.complete).length} of {history.months.length} months complete</span>
-            {firstIncomplete ? <Button onClick={() => selectMonth(firstIncomplete.monthEnd)} type="button" variant="outline">
-              Review incomplete month · {firstIncomplete.monthEnd}
-            </Button> : <span>All stored months have complete values.</span>}
+          {history.months.length > 0 && <div className="console-section-head">
+            <h2>Month-end history</h2>
+            <span className="wealth-evidence-summary">
+              {firstIncomplete ? <Button onClick={() => selectMonth(firstIncomplete.monthEnd)} type="button" variant="outline">
+                Review incomplete month · {firstIncomplete.monthEnd}
+              </Button> : <StatusLabel tone="success">All stored months have complete values</StatusLabel>}
+            </span>
           </div>}
           {history.months.length > 0 && (
             <EvidenceChart
+              dense
               title={`Month-end net worth · ${history.baseCurrency}`}
               description="Stored month-end totals only. Incomplete months are gaps, not zero; select a month in the ledger table for its positions and attribution."
               periods={history.months.map((row) => row.monthEnd.slice(0, 7))}
               series={[{
-                id: "networth", label: "Net worth", color: "var(--category-1)", lineStyle: "solid", marker: "circle",
+                // The primary chart series takes the console's interaction blue; the category
+                // palette stays for marks that carry a stored category identity.
+                id: "networth", label: "Net worth", color: "var(--console-blue)", lineStyle: "solid", marker: "circle",
                 points: history.months.map((row) => ({
                   period: row.monthEnd.slice(0, 7), coordinate: row.chartCoordinate,
                   exact: !row.complete || row.totalBase === null ? null : moneyText(row.totalBase, history.baseCurrency, currencies),
@@ -237,8 +281,8 @@ export function WealthScreen({ currency, currencies, request }: Props) {
             />
           )}
 
-          <div className="wealth-table-wrap">
-            <table className="wealth-table">
+          <DataTableRegion label="Month-end net worth table">
+            <table className="console-table wealth-table">
               <caption>Month-end net worth, in {currency.code}</caption>
               <thead>
                 <tr>
@@ -258,22 +302,23 @@ export function WealthScreen({ currency, currencies, request }: Props) {
                       <th scope="row">
                         <Button
                           aria-current={selected === row.monthEnd ? "true" : undefined}
+                          size="sm"
                           variant="outline"
                           onClick={() => selectMonth(row.monthEnd)}
                           type="button"
                         >{row.monthEnd}</Button>
                       </th>
-                      <td>
+                      <td className="console-number">
                         {total === null
                           ? "Unavailable — incomplete"
                           : moneyText(total, currency.code, currencies)}
                       </td>
                       <td>
                         {row.complete
-                          ? "Complete"
+                          ? <StatusLabel tone="success">Complete</StatusLabel>
                           : (
                             <>
-                              Incomplete month
+                              <StatusLabel tone="attention">Incomplete month</StatusLabel>
                               {statusCountsLine(row.statusCounts) && (
                                 <><br /><small>{statusCountsLine(row.statusCounts)}</small></>
                               )}
@@ -285,7 +330,19 @@ export function WealthScreen({ currency, currencies, request }: Props) {
                 })}
               </tbody>
             </table>
-          </div>
+          </DataTableRegion>
+
+          {state === "ready" && history && history.months.length > 0 && (
+            <details className="console-details">
+              <summary>How this history is stored</summary>
+              <div className="console-details-body">
+                <p className="console-module-sub">
+                  Each account&rsquo;s evidence date and translation rate are stored so past
+                  figures remain reproducible.
+                </p>
+              </div>
+            </details>
+          )}
 
           {selected && (
             <section aria-labelledby="wealth-month-title" className="wealth-month" ref={selectedPanelRef} tabIndex={-1}>
@@ -300,8 +357,8 @@ export function WealthScreen({ currency, currencies, request }: Props) {
                 </p>
               )}
               {monthState === "ready" && month && (
-                <div className="wealth-positions-wrap">
-                  <table className="wealth-positions">
+                <DataTableRegion label={`${selected} positions table`}>
+                  <table className="console-table wealth-positions">
                     <caption>{selected}, one row per account or holding</caption>
                     <thead>
                       <tr>
@@ -331,7 +388,7 @@ export function WealthScreen({ currency, currencies, request }: Props) {
                                 : moneyText(position.nativeValue, position.currency, currencies)}
                             </td>
                             <td>{position.evidenceDate ?? "—"}</td>
-                            <td>{value === null ? "—" : moneyText(value, currency.code, currencies)}</td>
+                            <td className="console-number">{value === null ? "—" : moneyText(value, currency.code, currencies)}</td>
                             <td>
                               {STATUS_HREF[position.status] ? (
                                 <Link href={STATUS_HREF[position.status]}>{statusLabel(position.status)}</Link>
@@ -344,7 +401,7 @@ export function WealthScreen({ currency, currencies, request }: Props) {
                       })}
                     </tbody>
                   </table>
-                </div>
+                </DataTableRegion>
               )}
 
               <section aria-labelledby="wealth-waterfall-title" className="wealth-waterfall">

@@ -429,6 +429,7 @@ export function Workspace({
               accounts={inventory.accounts}
               baseCurrency={household.baseCurrency}
               currencies={currencies}
+              currency={currency}
               institutions={institutions}
               onChanged={() => setAttempt((value) => value + 1)}
               request={wrappedRequest}

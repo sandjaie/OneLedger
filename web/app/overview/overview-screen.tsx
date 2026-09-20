@@ -534,7 +534,7 @@ export function OverviewScreen({ household, currency, currencies, request, logou
               series={[{
                 id: "position",
                 label: "Net position",
-                color: "var(--category-1)",
+                color: "var(--console-blue)",
                 lineStyle: "solid",
                 marker: "circle",
                 points: months.map((row) => ({

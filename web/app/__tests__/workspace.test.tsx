@@ -795,13 +795,13 @@ describe("authenticated workspace", () => {
     render(
       <Workspace
         section="accounts"
-        request={requestThat(household, inventory, institutions, catalogue)}
+        request={requestThat(household, inventory, institutions, catalogue, dashboard)}
         navigate={vi.fn()}
       />,
     );
     expect((await screen.findByRole("link", { name: "Accounts" })).getAttribute("aria-current")).toBe("page");
     expect(screen.getByText("Inventory Savings")).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Assets · XB" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Accounts by role" })).toBeTruthy();
   });
 
   it("renders the import screen and marks the nav current", async () => {
@@ -1154,12 +1154,12 @@ describe("authenticated workspace", () => {
     render(
       <Workspace
         section="accounts"
-        request={requestThat(household, inventory, institutions, catalogue, new ApiError(status, "synthetic"))}
+        request={requestThat(household, inventory, institutions, catalogue, dashboard, new ApiError(status, "synthetic"))}
         navigate={navigate}
       />,
     );
     await screen.findByText("Inventory Savings");
-    fireEvent.click(screen.getByRole("button", { name: "Add an account" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add account" }));
     fireEvent.change(screen.getByLabelText("Account name"), { target: { value: "New" } });
     fireEvent.change(screen.getByLabelText("Opening balance"), { target: { value: "1.00" } });
     fireEvent.change(screen.getByLabelText("Opening balance date"), { target: { value: "2024-01-01" } });
