@@ -5,10 +5,13 @@ import { useEffect, useState } from "react";
 
 import { AllocationEvidenceChart } from "@/app/investments/allocation-evidence-chart";
 import { InvestmentAnalysis } from "@/app/investments/investment-analysis";
-import { InvestmentEventForm } from "@/app/investments/investment-event-form";
 import { ReviewQueue } from "@/app/investments/review-queue";
 import { XIRR_REASON_TEXT } from "@/app/investments/return-reasons";
-import { WealthRefreshNotice } from "@/app/investments/wealth-refresh-notice";
+import { AttentionRow } from "@/app/ui/attention-row";
+import { ConsolePageHeader } from "@/app/ui/console-page-header";
+import { DataTableRegion } from "@/app/ui/data-table-region";
+import { MetricStrip } from "@/app/ui/metric-strip";
+import { StatusLabel } from "@/app/ui/status-label";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { INVESTMENT_ACCOUNT_TYPES } from "@/lib/accounts/types";
@@ -52,30 +55,11 @@ function priceStatusLabel(position: AcquisitionPosition) {
   return "";
 }
 
-function Metric({
-  label,
-  value,
-  reason,
-  asOf,
-}: {
-  label: string;
-  value: string | null;
-  reason?: string | null;
-  asOf?: string;
-}) {
-  return (
-    <article aria-label={label} className="portfolio-metric">
-      <p className="section-label">{label}</p>
-      {value !== null ? (
-        <>
-          <strong>{value}</strong>
-          {asOf && <small>as of {dateLabel(asOf)}</small>}
-        </>
-      ) : (
-        <p className="investment-state">{reasonText(reason ?? null) || "Unavailable."}</p>
-      )}
-    </article>
-  );
+function valueStatusReason(position: AcquisitionPosition) {
+  if (position.valueStatus === "outside_supported_range") {
+    return "The exact value is outside the supported reporting range.";
+  }
+  return "";
 }
 
 export function PortfolioScreen({ request, accounts }: Props) {
@@ -87,7 +71,6 @@ export function PortfolioScreen({ request, accounts }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [refreshMessage, setRefreshMessage] = useState("");
   const [refreshProblem, setRefreshProblem] = useState(false);
-  const [eventNotice, setEventNotice] = useState("");
 
   useEffect(() => {
     let current = true;
@@ -140,18 +123,35 @@ export function PortfolioScreen({ request, accounts }: Props) {
   const due = summary ? isRefreshDue(summary.priceStatus) : false;
   const hasInvestmentAccount = accounts.some((account) => account.isActive && INVESTMENT_ACCOUNT_TYPES.has(account.accountType));
 
+  function positionTone(position: AcquisitionPosition) {
+    if (position.closed) return "neutral";
+    if (position.valueStatus === "outside_supported_range") return "attention";
+    if (position.priceStatus === "missing" || position.priceStatus === "future_price_only") return "attention";
+    if (position.priceStatus === "stale") return "danger";
+    return "success";
+  }
+
+  function positionStatus(position: AcquisitionPosition) {
+    if (position.closed) return "Closed";
+    if (position.valueStatus === "outside_supported_range") return "Unsupported value";
+    if (position.priceStatus === "missing") return "Missing price";
+    if (position.priceStatus === "future_price_only") return "Future price only";
+    if (position.priceStatus === "stale") return "Stale price";
+    return "Valued";
+  }
+
   return (
     <section className="workspace-content portfolio-screen" aria-labelledby="portfolio-title">
-      <header className="investment-entry-header">
-        <div>
-          <p className="eyebrow">Owner portfolio</p>
-          <h1 className="workspace-title" id="portfolio-title">Investments</h1>
-        </div>
-        {state === "ready" && positions.length > 0 && <div className="portfolio-links">
-          <Link className={buttonVariants({ variant: "outline" })} href="/investments/entry">Record a purchase</Link>
-          <Link className={buttonVariants({ variant: "outline" })} href="/investments/import">Import a statement</Link>
-        </div>}
-      </header>
+      <div id="portfolio-title">
+        <ConsolePageHeader
+          actions={state === "ready" && positions.length > 0 ? <>
+            <Link className={buttonVariants()} href="/investments/entry">Record event</Link>
+            <Link className={buttonVariants({ variant: "outline" })} href="/investments/import">Import evidence</Link>
+          </> : undefined}
+          description="Valuation evidence, lifecycle state and return history without estimated gaps."
+          title="Investments"
+        />
+      </div>
 
       {state === "loading" && <p className="investment-state" role="status">Loading portfolio…</p>}
       {state === "error" && (
@@ -163,12 +163,11 @@ export function PortfolioScreen({ request, accounts }: Props) {
 
       {state === "ready" && summary && (
         <>
-          {positions.length === 0 && <section aria-label="Start your investments" className="portfolio-start">
-            <p className="section-label">Start here</p>
+          {positions.length === 0 && <section aria-label="Start your investments" className="console-empty-focus portfolio-start">
             <h2>Bring your investments into view</h2>
             <div className="portfolio-start-actions">
-              <Link className={buttonVariants()} href="/investments/entry">Record a purchase</Link>
-              <Link className={buttonVariants({ variant: "outline" })} href="/investments/import">Import a statement</Link>
+              <Link className={buttonVariants()} href="/investments/entry">Record event</Link>
+              <Link className={buttonVariants({ variant: "outline" })} href="/investments/import">Import evidence</Link>
             </div>
             <p>Analysis needs a recorded holding and dated evidence before value, gain or return can be shown.
               {!hasInvestmentAccount && <> An investment account is required before recording a purchase. <Link href="/accounts">Add an account</Link>.</>}
@@ -181,51 +180,59 @@ export function PortfolioScreen({ request, accounts }: Props) {
 
           {positions.length > 0 && <>
 
-          <section className="portfolio-metrics" aria-label="Portfolio totals">
-            <Metric asOf={summary.asOf} label={summary.valueComplete ? "Value" : "Valued portion"}
-              reason={summary.valuedCount === 0 ? "No holdings have a supported current value." : null}
-              value={summary.valuedCount === 0 ? null : `${summary.baseCurrency} ${summary.valueBase}`} />
-            <Metric asOf={summary.asOf} label="Contributions" value={`${summary.baseCurrency} ${summary.contributionsBase}`} />
-            <Metric asOf={summary.asOf} label="Gain" reason={summary.gainBase === null ? "One or more holdings do not have a supported gain." : null} value={summary.gainBase === null ? null : `${summary.baseCurrency} ${summary.gainBase}`} />
-            <Metric label="XIRR" reason={summary.xirrReason} value={summary.xirrPercent === null ? null : `${summary.xirrPercent}%`} />
-          </section>
-          <section aria-label="Valuation confidence" className="portfolio-confidence">
-          <div className="portfolio-confidence-head">
-            <div><p className="section-label">Evidence status</p><h2>Valuation confidence</h2></div>
-            <p>{summary.valuedCount} valued · {summary.unvaluedCount} unvalued
-              {summary.staleCount > 0 && ` · ${summary.staleCount} stale`}</p>
-          </div>
-          {!summary.valueComplete && (
-            <p className="investment-state">{summary.unvaluedCount} of {summary.valuedCount + summary.unvaluedCount} holdings are not valued and are excluded from the displayed valued portion.</p>
-          )}
+          <MetricStrip label="Portfolio totals" items={[
+            {
+              label: summary.valueComplete ? "Value" : "Valued portion",
+              value: summary.valuedCount === 0 ? "Unavailable" : `${summary.baseCurrency} ${summary.valueBase}`,
+              detail: summary.valuedCount === 0 ? "No holdings have a supported current value." : `As of ${dateLabel(summary.asOf)}`,
+            },
+            { label: "Contributions", value: `${summary.baseCurrency} ${summary.contributionsBase}`, detail: `As of ${dateLabel(summary.asOf)}` },
+            {
+              label: "Gain",
+              value: summary.gainBase === null ? "Unavailable" : `${summary.baseCurrency} ${summary.gainBase}`,
+              detail: summary.gainBase === null ? "One or more holdings do not have a supported gain." : `As of ${dateLabel(summary.asOf)}`,
+            },
+            {
+              label: "XIRR",
+              value: summary.xirrPercent === null ? "Unavailable" : `${summary.xirrPercent}%`,
+              detail: summary.xirrPercent === null ? reasonText(summary.xirrReason) || "Return evidence is incomplete." : "Portfolio cash-flow return",
+            },
+          ]} />
 
-          <section aria-labelledby="price-status-title" className="portfolio-price-status">
-            <div>
-              <p className="section-label" id="price-status-title">Official prices</p>
-              <p>
-                {summary.priceStatus.mappedCount} mapped, {summary.priceStatus.unmappedCount} unmapped.
-                {summary.priceStatus.latestPriceDate && ` Latest price ${dateLabel(summary.priceStatus.latestPriceDate)}.`}
-                {summary.staleCount > 0 && ` ${summary.staleCount} holding${summary.staleCount === 1 ? " carries" : "s carry"} a stale price.`}
-              </p>
-            </div>
-            {due ? (
-              <Button disabled={refreshing} onClick={() => void refreshPrices()} type="button" variant="outline">
-                {refreshing ? "Checking source…" : "Check for new prices"}
-              </Button>
-            ) : (
-              <p className="investment-exact">Checked within the last 24 hours.</p>
-            )}
-            {refreshMessage && <p className="investment-feedback" role="status">{refreshMessage}</p>}
-            {refreshProblem && <p className="inline-alert" role="alert">The price check could not be completed.</p>}
-          </section>
+          <section aria-label="Valuation confidence" className="portfolio-confidence">
+            <div className="console-section-head"><h2>Valuation confidence</h2><span>Server evidence status</span></div>
+            <dl className="console-figures portfolio-confidence-facts">
+              <div><dt>Valued</dt><dd>{summary.valuedCount}</dd></div>
+              <div><dt>Unvalued</dt><dd>{summary.unvaluedCount}</dd></div>
+              <div><dt>Stale</dt><dd>{summary.staleCount}</dd></div>
+              <div><dt>Closed history</dt><dd>{closed.length}</dd></div>
+            </dl>
+            {(!summary.valueComplete || summary.staleCount > 0) && <AttentionRow
+              detail={`${summary.unvaluedCount} unvalued · ${summary.staleCount} stale. Missing or stale evidence remains explicit and excluded where required.`}
+              title="Valuation gaps"
+              tone="attention"
+            />}
+            <section aria-labelledby="price-status-title" className="portfolio-price-status">
+              <div>
+                <h3 id="price-status-title">Official prices</h3>
+                <p>
+                  {summary.priceStatus.mappedCount} mapped · {summary.priceStatus.unmappedCount} unmapped
+                  {summary.priceStatus.latestPriceDate && ` · latest ${dateLabel(summary.priceStatus.latestPriceDate)}`}
+                </p>
+              </div>
+              {due ? (
+                <Button disabled={refreshing} onClick={() => void refreshPrices()} type="button" variant="outline">
+                  {refreshing ? "Checking source…" : "Check for new prices"}
+                </Button>
+              ) : <StatusLabel tone="success">Checked within the last 24 hours.</StatusLabel>}
+              {refreshMessage && <p className="investment-feedback" role="status">{refreshMessage}</p>}
+              {refreshProblem && <p className="inline-alert" role="alert">The price check could not be completed.</p>}
+            </section>
           </section>
 
           <section aria-labelledby="holdings-title" className="investment-holdings">
-            <div className="investment-section-head">
-              <div>
-                <p className="section-label">Open positions</p>
-                <h2 id="holdings-title">Holdings</h2>
-              </div>
+            <div className="console-section-head">
+              <h2 id="holdings-title">Holdings</h2>
               {closed.length > 0 && (
                 <label className="check-field">
                   <Checkbox checked={showClosed} onCheckedChange={(checked) => setShowClosed(checked === true)} />
@@ -234,26 +241,26 @@ export function PortfolioScreen({ request, accounts }: Props) {
               )}
             </div>
             {visible.length === 0 && <p className="investment-state">No holdings to show.</p>}
-            {visible.length > 0 && (
-              <div className="investment-holding-grid">
-                {visible.map((position) => (
-                  <Link className="investment-holding" href={`/investments/${position.holdingId}`} key={position.holdingId}>
-                    <div>
-                      <p className="section-label">{position.assetClass}{position.closed ? " · closed" : ""}</p>
-                      <h3>{position.securityName}</h3>
-                      <p className="investment-exact">{position.units} units</p>
-                    </div>
-                    <div className="investment-holding-value">
-                      <small>Current value</small>
-                      <strong>{position.currentValueNative === null ? "Unavailable" : `${position.currency} ${position.currentValueNative}`}</strong>
-                      <p>{priceStatusLabel(position)}</p>
-                      <p>{position.gainNative === null ? "Gain unavailable" : `Gain ${position.currency} ${position.gainNative}`}</p>
-                      <p>{position.xirrPercent === null ? reasonText(position.xirrReason ?? null) : `XIRR ${position.xirrPercent}%`}</p>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            )}
+            {visible.length > 0 && <DataTableRegion label="Portfolio holdings table">
+              <table className="console-table portfolio-holdings-table">
+                <thead><tr><th>Holding</th><th className="console-number">Units</th><th>Price evidence</th><th>Status</th><th className="console-number">Current value</th><th className="console-number">Gain</th></tr></thead>
+                <tbody>{visible.map((position) => <tr key={position.holdingId}>
+                  <th scope="row"><div className="console-entity">
+                    <span aria-hidden="true" className="console-entity-mark">INV</span>
+                    <div><Link className="console-entity-title" href={`/investments/${position.holdingId}`}>{position.securityName}</Link>
+                      <span className="console-entity-sub">{position.assetClass}{position.closed ? " · closed" : ""}</span></div>
+                  </div></th>
+                  <td className="console-number">{position.units}</td>
+                  <td className="portfolio-price-evidence">
+                    <p>{priceStatusLabel(position)}</p>
+                    {valueStatusReason(position) && <p>{valueStatusReason(position)}</p>}
+                  </td>
+                  <td><StatusLabel tone={positionTone(position)}>{positionStatus(position)}</StatusLabel></td>
+                  <td className="console-number">{position.currentValueNative === null ? "Unavailable" : `${position.currency} ${position.currentValueNative}`}</td>
+                  <td className="console-number">{position.gainNative === null ? "Gain unavailable" : `${position.currency} ${position.gainNative}`}</td>
+                </tr>)}</tbody>
+              </table>
+            </DataTableRegion>}
           </section>
 
           <ReviewQueue request={request} />
@@ -262,37 +269,20 @@ export function PortfolioScreen({ request, accounts }: Props) {
             refreshKey={attempt} request={request} />
 
           <section aria-labelledby="allocation-title" className="portfolio-allocation">
-            <div>
-              <p className="section-label">Composition</p>
-              <h2 id="allocation-title">Allocation</h2>
-              {!summary.allocationComplete && <p className="investment-state">Incomplete — one or more holdings are unvalued.</p>}
-            </div>
+            <div className="console-section-head"><h2 id="allocation-title">Allocation</h2><span>Valued holdings only</span></div>
+            {!summary.allocationComplete && <AttentionRow detail="One or more holdings are unvalued; ratios cover only the valued evidence." title="Incomplete allocation" tone="attention" />}
             <AllocationEvidenceChart currency={summary.baseCurrency} groups={summary.allocationByAssetClass} />
-            <details className="investment-disclosure">
+            <details className="console-details investment-disclosure">
               <summary>Allocation by account</summary>
-              <div className="evidence-chart-table-wrap">
-                <table aria-label="Allocation by account exact values">
+              <DataTableRegion label="Allocation by account table">
+                <table aria-label="Allocation by account exact values" className="console-table portfolio-allocation-table">
                   <thead><tr><th scope="col">Account</th><th scope="col">Value</th><th scope="col">Ratio</th></tr></thead>
                   <tbody>{summary.allocationByAccount.map((group) => (
                     <tr key={group.label}><th scope="row">{group.label}</th><td>{summary.baseCurrency} {group.valueBase}</td><td>{group.ratio ?? "Not available"}</td></tr>
                   ))}</tbody>
                 </table>
-              </div>
+              </DataTableRegion>
             </details>
-          </section>
-
-
-          <section aria-labelledby="portfolio-record-event-title">
-            <p className="section-label" id="portfolio-record-event-title">Record an event</p>
-            {eventNotice && <WealthRefreshNotice message={eventNotice} />}
-            <InvestmentEventForm
-              accounts={accounts}
-              onRecorded={() => {
-                setEventNotice("Event recorded.");
-                setAttempt((value) => value + 1);
-              }}
-              request={request}
-            />
           </section>
           </>}
         </>

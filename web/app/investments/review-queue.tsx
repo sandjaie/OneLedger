@@ -6,6 +6,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { reasonText } from "@/app/investments/review-reasons";
+import { DataTableRegion } from "@/app/ui/data-table-region";
+import { StatusLabel } from "@/app/ui/status-label";
 import { errorText, type apiFetch } from "@/lib/api/client";
 import type { ReviewItemRow } from "@/types/api";
 
@@ -17,6 +19,10 @@ type Props = {
 
 type LoadState = "loading" | "ready" | "error";
 const PAGE_SIZE = 20;
+
+function reviewScope(row: ReviewItemRow) {
+  return [row.securityName, row.accountName].filter(Boolean).join(" · ") || "Imported evidence";
+}
 
 /** Every open investment review this household owns — a holding-scoped row (lot allocation)
  * links to its holding, an import-scoped row to its import. */
@@ -65,24 +71,29 @@ export function ReviewQueue({ request, quietEmpty = false }: Props) {
 
   return (
     <section aria-labelledby="investment-reviews-title" className="investment-reviews">
-      <p className="section-label" id="investment-reviews-title">Reviews</p>
+      <div className="console-section-head">
+        <h2 id="investment-reviews-title">Reviews</h2>
+        {state === "ready" && rows.length > 0 && <span>{hasMore ? `${rows.length}+ loaded` : `${rows.length} open`}</span>}
+      </div>
       {state === "loading" && <p className="investment-state" role="status">Loading reviews…</p>}
       {state === "error" && <p className="inline-alert" role="alert">Open reviews could not be loaded.</p>}
       {state === "ready" && rows.length === 0 && <p className="investment-state">No open reviews.</p>}
       {rows.length > 0 && (
-        <ul>
-          {rows.map((row) => (
-            <li key={row.id}>
-              <span>{reasonText(row.reason)}</span>
-              {row.securityName && <span> · {row.securityName}</span>}
-              {row.accountName && <span> · {row.accountName}</span>}
-              {row.holdingId && <Link href={`/investments/${row.holdingId}`}>View holding</Link>}
-              {!row.holdingId && row.importId && (
-                <Link href={`/investments/import/${row.importId}`}>View import</Link>
-              )}
-            </li>
-          ))}
-        </ul>
+        <DataTableRegion label="Investment reviews table">
+          <table className="console-table investment-reviews-table">
+            <thead><tr><th>Review</th><th>Scope</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody>{rows.map((row) => (
+              <tr key={row.id}>
+                <th scope="row">{reasonText(row.reason)}</th>
+                <td>{reviewScope(row)}</td>
+                <td><StatusLabel tone={row.isBlocking ? "danger" : "attention"}>{row.isBlocking ? "Blocking" : "Needs review"}</StatusLabel></td>
+                <td>{row.holdingId
+                  ? <Link href={`/investments/${row.holdingId}`}>View holding</Link>
+                  : row.importId ? <Link href={`/investments/import/${row.importId}`}>View import</Link> : "—"}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </DataTableRegion>
       )}
       {problem && <p className="inline-alert" role="alert">{problem}</p>}
       {state === "ready" && hasMore && (

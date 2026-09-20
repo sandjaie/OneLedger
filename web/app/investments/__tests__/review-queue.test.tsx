@@ -45,5 +45,27 @@ describe("ReviewQueue", () => {
     expect(screen.getByRole("link", { name: "View import" }).getAttribute("href")).toBe(
       "/investments/import/00000000-0000-4000-8000-000000000070",
     );
+    expect(screen.getByRole("cell", { name: "Synthetic Growth Fund · Synthetic broker" })).toBeTruthy();
+    expect(screen.getByText("2 open")).toBeTruthy();
+  });
+
+  it("labels a full page as partial rather than claiming it is the open total", async () => {
+    const rows: Array<ReviewItemRow> = Array.from({ length: 20 }, (_, index) => ({
+      id: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+      reason: "unknown_security",
+      isBlocking: true,
+      holdingId: null,
+      securityName: null,
+      accountName: null,
+      importId: `00000000-0000-4000-8001-${String(index).padStart(12, "0")}`,
+      investmentTransactionId: null,
+      createdAt: "2026-01-09T00:00:00Z",
+    }));
+    const request = vi.fn(async () => rows) as unknown as typeof apiFetch;
+
+    render(<ReviewQueue request={request} />);
+
+    expect(await screen.findByText("20+ loaded")).toBeTruthy();
+    expect(screen.queryByText("20 open")).toBeNull();
   });
 });
