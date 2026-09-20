@@ -6,7 +6,11 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
+import { AttentionRow } from "@/app/ui/attention-row";
+import { DataTableRegion } from "@/app/ui/data-table-region";
 import { EvidenceChart } from "@/app/ui/evidence-chart";
+import { MetricStrip } from "@/app/ui/metric-strip";
+import { StatusLabel } from "@/app/ui/status-label";
 import { errorText, type apiFetch } from "@/lib/api/client";
 import { dateLabel, monthLabel } from "@/lib/format/date";
 import { formatPercent, moneyText } from "@/lib/money/format";
@@ -24,6 +28,7 @@ type Props = {
    * this analysis reloads with them — the same "attempt" convention that reloads the payslip
    * list itself. */
   refreshKey: number;
+  unclassifiedDeductionCount?: number;
 };
 
 type LoadState = "loading" | "ready" | "error";
@@ -48,7 +53,7 @@ function monthRows(currency: SalaryCurrencyOut): Array<MonthRow> {
   return rows.sort((a, b) => (a.payMonth < b.payMonth ? 1 : a.payMonth > b.payMonth ? -1 : 0));
 }
 
-export function SalaryAnalysis({ currencies, request, refreshKey }: Props) {
+export function SalaryAnalysis({ currencies, request, refreshKey, unclassifiedDeductionCount = 0 }: Props) {
   const [data, setData] = useState<SalaryAnalysisResponse>();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [retryAttempt, setRetryAttempt] = useState(0);
@@ -108,10 +113,23 @@ export function SalaryAnalysis({ currencies, request, refreshKey }: Props) {
 
   const current: SalaryCurrencyOut | undefined =
     data?.currencies.find((row) => row.currency === selectedCurrency) ?? data?.currencies[0];
+  const rows = current ? monthRows(current) : [];
+  const latestPayslip = rows.find((row) => row.payslip)?.payslip;
+  const unmatchedCreditCount = data?.salaryCreditsWithoutPayslip.length ?? 0;
+  const attentionCount = unmatchedCreditCount + unclassifiedDeductionCount;
+  const attentionRow = (
+    <AttentionRow
+      tone={attentionCount > 0 ? "attention" : "success"}
+      title={attentionCount > 0 ? "Salary evidence needs attention" : "Salary evidence is reconciled"}
+      detail={attentionCount > 0
+        ? `${unmatchedCreditCount} unmatched salary ${unmatchedCreditCount === 1 ? "credit" : "credits"} · ${unclassifiedDeductionCount} unclassified ${unclassifiedDeductionCount === 1 ? "deduction" : "deductions"}`
+        : "No unmatched salary credits or unclassified deductions are visible."}
+      action={unmatchedCreditCount > 0 ? <a href="#salary-credits-without-payslip-title">Review credits</a> : undefined}
+    />
+  );
 
   return (
-    <section aria-labelledby="salary-analysis-title">
-      <h2 id="salary-analysis-title">Analysis</h2>
+    <section aria-label="Salary evidence" className="salary-analysis">
 
       {loadState === "loading" && <p role="status">Loading salary analysis…</p>}
       {loadState === "error" && (
@@ -153,14 +171,46 @@ export function SalaryAnalysis({ currencies, request, refreshKey }: Props) {
                 </div>
               )}
 
+              {latestPayslip && (
+                <>
+                  <div className="salary-lead">
+                    <div>
+                      <p className="section-label">Latest evidenced pay period</p>
+                      <h2>{monthLabel(latestPayslip.payMonth)}</h2>
+                      <StatusLabel tone={latestPayslip.receiptStatus === "received" ? "success" : "attention"}>
+                        Receipt {latestPayslip.receiptStatus === "unlinked"
+                          ? "not linked"
+                          : (RECEIPT_TEXT[latestPayslip.receiptStatus] ?? latestPayslip.receiptStatus).toLowerCase()}
+                      </StatusLabel>
+                    </div>
+                    <p>
+                      Earned pay and linked receipt remain separate evidence. Missing or ineligible
+                      receipt evidence is never inferred.
+                    </p>
+                  </div>
+                  <MetricStrip
+                    label={`Latest salary evidence for ${monthLabel(latestPayslip.payMonth)}`}
+                    items={[
+                      { label: "Earned net pay", value: moneyText(latestPayslip.netPay, current.currency, currencies), detail: current.currency },
+                      { label: "Cash received", value: latestPayslip.cashReceived === null ? "Not available" : moneyText(latestPayslip.cashReceived, current.currency, currencies), detail: "Eligible linked deposit" },
+                      { label: "Deductions", value: moneyText(latestPayslip.deductions, current.currency, currencies), detail: "Payslip evidence" },
+                      { label: "Compensation", value: moneyText(latestPayslip.compensation, current.currency, currencies), detail: "Before deductions" },
+                    ]}
+                  />
+                </>
+              )}
+
+              {attentionRow}
+
               {current.trend.length > 0 && (
                 <EvidenceChart
+                  dense
                   title={`Payslip net pay and linked receipts · ${current.currency}`}
                   description="Payslip net pay is an earned claim; linked receipt is shown only when every payslip in that month has an eligible matching deposit. Unlinked or ineligible receipts and months without payslips remain gaps; unmatched salary credits are listed below."
                   periods={current.trend.map((point) => point.payMonth)}
                   series={[
                     {
-                      id: "earned", label: "Payslip net pay", color: "var(--category-1)", lineStyle: "solid", marker: "circle",
+                      id: "earned", label: "Payslip net pay", color: "var(--console-blue)", lineStyle: "solid", marker: "circle",
                       points: current.trend.map((point) => ({
                         period: point.payMonth, coordinate: point.earnedCoordinate,
                         exact: point.earnedNetPay === null ? null : moneyText(point.earnedNetPay, current.currency, currencies),
@@ -178,9 +228,12 @@ export function SalaryAnalysis({ currencies, request, refreshKey }: Props) {
               )}
 
               <section aria-labelledby="salary-years-title">
-                <p className="section-label" id="salary-years-title">Years</p>
-                <div className="overview-scroll">
-                  <table className="spending-table">
+                <div className="console-section-head">
+                  <h2 id="salary-years-title">Annual evidence</h2>
+                  <span>{current.currency}</span>
+                </div>
+                <DataTableRegion label="Salary by year">
+                  <table className="console-table salary-years-table">
                     <caption className="visually-hidden">Salary by year</caption>
                     <thead>
                       <tr>
@@ -202,28 +255,31 @@ export function SalaryAnalysis({ currencies, request, refreshKey }: Props) {
                       {current.years.map((year) => (
                         <tr key={year.year}>
                           <th scope="row">{year.year}</th>
-                          <td>{moneyText(year.compensation, current.currency, currencies)}</td>
-                          <td>{moneyText(year.fixed, current.currency, currencies)}</td>
-                          <td>{moneyText(year.variable, current.currency, currencies)}</td>
-                          <td>{year.variableShare !== null ? formatPercent(year.variableShare) : "—"}</td>
-                          <td>{moneyText(year.reimbursement, current.currency, currencies)}</td>
-                          <td>{moneyText(year.deductions, current.currency, currencies)}</td>
-                          <td>{moneyText(year.netPay, current.currency, currencies)}</td>
-                          <td>{moneyText(year.cashReceived, current.currency, currencies)}</td>
-                          <td>{year.payslipMonths}</td>
-                          <td>{year.gapMonths}</td>
-                          <td>{year.receivedMonths}</td>
+                          <td className="console-number">{moneyText(year.compensation, current.currency, currencies)}</td>
+                          <td className="console-number">{moneyText(year.fixed, current.currency, currencies)}</td>
+                          <td className="console-number">{moneyText(year.variable, current.currency, currencies)}</td>
+                          <td className="console-number">{year.variableShare !== null ? formatPercent(year.variableShare) : "—"}</td>
+                          <td className="console-number">{moneyText(year.reimbursement, current.currency, currencies)}</td>
+                          <td className="console-number">{moneyText(year.deductions, current.currency, currencies)}</td>
+                          <td className="console-number">{moneyText(year.netPay, current.currency, currencies)}</td>
+                          <td className="console-number">{moneyText(year.cashReceived, current.currency, currencies)}</td>
+                          <td className="console-number">{year.payslipMonths}</td>
+                          <td className="console-number">{year.gapMonths}</td>
+                          <td className="console-number">{year.receivedMonths}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </DataTableRegion>
               </section>
 
               <section aria-labelledby="salary-months-title">
-                <p className="section-label" id="salary-months-title">Months</p>
-                <div className="overview-scroll">
-                  <table className="spending-table">
+                <div className="console-section-head">
+                  <h2 id="salary-months-title">Pay periods</h2>
+                  <span>{rows.length} evidenced or missing periods</span>
+                </div>
+                <DataTableRegion label="Salary by month">
+                  <table className="console-table salary-months-table">
                     <caption className="visually-hidden">Salary by month</caption>
                     <thead>
                       <tr>
@@ -239,23 +295,23 @@ export function SalaryAnalysis({ currencies, request, refreshKey }: Props) {
                       </tr>
                     </thead>
                     <tbody>
-                      {monthRows(current).map((row, index) => (
+                      {rows.map((row, index) => (
                         <tr key={`${row.payMonth}-${index}`}>
                           <th scope="row">{monthLabel(row.payMonth)}</th>
                           {row.payslip ? (
                             <>
-                              <td>{moneyText(row.payslip.compensation, current.currency, currencies)}</td>
-                              <td>{moneyText(row.payslip.fixed, current.currency, currencies)}</td>
-                              <td>{moneyText(row.payslip.variable, current.currency, currencies)}</td>
-                              <td>{moneyText(row.payslip.reimbursement, current.currency, currencies)}</td>
-                              <td>{moneyText(row.payslip.deductions, current.currency, currencies)}</td>
-                              <td>{moneyText(row.payslip.netPay, current.currency, currencies)}</td>
-                              <td>
+                              <td className="console-number">{moneyText(row.payslip.compensation, current.currency, currencies)}</td>
+                              <td className="console-number">{moneyText(row.payslip.fixed, current.currency, currencies)}</td>
+                              <td className="console-number">{moneyText(row.payslip.variable, current.currency, currencies)}</td>
+                              <td className="console-number">{moneyText(row.payslip.reimbursement, current.currency, currencies)}</td>
+                              <td className="console-number">{moneyText(row.payslip.deductions, current.currency, currencies)}</td>
+                              <td className="console-number">{moneyText(row.payslip.netPay, current.currency, currencies)}</td>
+                              <td className="console-number">
                                 {row.payslip.cashReceived !== null
                                   ? moneyText(row.payslip.cashReceived, current.currency, currencies)
                                   : "—"}
                               </td>
-                              <td>{RECEIPT_TEXT[row.payslip.receiptStatus] ?? row.payslip.receiptStatus}</td>
+                              <td><StatusLabel tone={row.payslip.receiptStatus === "received" ? "success" : "attention"}>{RECEIPT_TEXT[row.payslip.receiptStatus] ?? row.payslip.receiptStatus}</StatusLabel></td>
                             </>
                           ) : (
                             <td colSpan={8}>No payslip</td>
@@ -264,17 +320,17 @@ export function SalaryAnalysis({ currencies, request, refreshKey }: Props) {
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </DataTableRegion>
               </section>
 
-              <section aria-labelledby="salary-increments-title">
-                <p className="section-label" id="salary-increments-title">Increments</p>
+              <section className="salary-signal-panel" aria-labelledby="salary-increments-title">
+                <div className="console-section-head"><h2 id="salary-increments-title">Increments</h2></div>
                 {current.increments.length === 0 && <p>No increment is recorded yet.</p>}
                 {current.increments.length > 0 && (
-                  <ul className="recurring-confirmed-list">
+                  <ul className="console-list">
                     {current.increments.map((increment) => (
                       <li key={increment.effectiveMonth}>
-                        <span>
+                        <span className="console-list-value">
                           {monthLabel(increment.effectiveMonth)} ·{" "}
                           {moneyText(increment.previousFixed, current.currency, currencies)} →{" "}
                           {moneyText(increment.newFixed, current.currency, currencies)}
@@ -285,8 +341,8 @@ export function SalaryAnalysis({ currencies, request, refreshKey }: Props) {
                         </span>
                         {(increment.confirmed === false || increment.acrossGap) && (
                           <span className="plans-badges">
-                            {!increment.confirmed && <span className="plans-badge">Unconfirmed</span>}
-                            {increment.acrossGap && <span className="plans-badge">After a gap</span>}
+                            {!increment.confirmed && <StatusLabel tone="attention">Unconfirmed</StatusLabel>}
+                            {increment.acrossGap && <StatusLabel tone="neutral">After a gap</StatusLabel>}
                           </span>
                         )}
                       </li>
@@ -295,13 +351,13 @@ export function SalaryAnalysis({ currencies, request, refreshKey }: Props) {
                 )}
               </section>
 
-              <section aria-labelledby="salary-variable-pay-title">
-                <p className="section-label" id="salary-variable-pay-title">Variable pay</p>
+              <section className="salary-signal-panel" aria-labelledby="salary-variable-pay-title">
+                <div className="console-section-head"><h2 id="salary-variable-pay-title">Variable pay</h2></div>
                 {current.variablePay.length === 0 && <p>No variable pay is recorded yet.</p>}
                 {current.variablePay.length > 0 && (
-                  <ul className="recurring-confirmed-list">
+                  <ul className="console-list">
                     {current.variablePay.map((entry, index) => (
-                      <li key={`${entry.payslipId}-${index}`}>
+                      <li className="console-list-row" key={`${entry.payslipId}-${index}`}>
                         <span>{monthLabel(entry.payMonth)} · {entry.label}</span>
                         <span>{moneyText(entry.amount, current.currency, currencies)}</span>
                       </li>
@@ -311,9 +367,9 @@ export function SalaryAnalysis({ currencies, request, refreshKey }: Props) {
               </section>
 
               <section aria-labelledby="salary-labels-title">
-                <p className="section-label" id="salary-labels-title">Earning labels</p>
-                <div className="overview-scroll">
-                  <table className="spending-table">
+                <div className="console-section-head"><h2 id="salary-labels-title">Earning labels</h2></div>
+                <DataTableRegion label="Earning labels">
+                  <table className="console-table salary-labels-table">
                     <caption className="visually-hidden">Earning labels</caption>
                     <thead>
                       <tr>
@@ -341,12 +397,12 @@ export function SalaryAnalysis({ currencies, request, refreshKey }: Props) {
                               <option value="variable">Variable</option>
                               <option value="reimbursement">Reimbursement</option>
                             </NativeSelect>
-                            {label.source === "inferred" && <span className="plans-badge">Inferred</span>}
+                            {label.source === "inferred" && <StatusLabel tone="neutral">Inferred</StatusLabel>}
                           </td>
                           <td>{label.monthCount}</td>
                           <td>{monthLabel(label.firstMonth)}</td>
                           <td>{monthLabel(label.lastMonth)}</td>
-                          <td>{moneyText(label.latestAmount, current.currency, currencies)}</td>
+                          <td className="console-number">{moneyText(label.latestAmount, current.currency, currencies)}</td>
                           <td>
                             {label.source === "rule" && (
                               <Button
@@ -363,27 +419,27 @@ export function SalaryAnalysis({ currencies, request, refreshKey }: Props) {
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </DataTableRegion>
               </section>
             </>
           )}
 
-          <section aria-labelledby="salary-credits-without-payslip-title">
-            <p className="section-label" id="salary-credits-without-payslip-title">
-              Salary credits without a payslip
-            </p>
+          {!current && attentionRow}
+
+          <section className="salary-unmatched-credits" aria-labelledby="salary-credits-without-payslip-title">
+            <div className="console-section-head"><h2 id="salary-credits-without-payslip-title">Salary credits without a payslip</h2></div>
             {data.salaryCreditsWithoutPayslip.length === 0 && <p>No salary credit is missing a payslip.</p>}
             {data.salaryCreditsWithoutPayslip.length > 0 && (
-              <ul className="recurring-confirmed-list">
+              <ul className="console-list">
                 {data.salaryCreditsWithoutPayslip.map((credit) => (
-                  <li key={credit.transactionId}>
+                  <li className="console-list-row" key={credit.transactionId}>
                     <span>
                       <Link href={`/transactions?dateFrom=${credit.bookedDate}&dateTo=${credit.bookedDate}`}>
                         {dateLabel(credit.bookedDate)}
                       </Link>{" "}
                       · {credit.accountName}
                     </span>
-                    <span>{moneyText(credit.amount, credit.currency, currencies)}</span>
+                    <span className="console-list-value">{moneyText(credit.amount, credit.currency, currencies)}</span>
                   </li>
                 ))}
               </ul>

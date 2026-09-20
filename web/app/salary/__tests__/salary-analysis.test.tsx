@@ -113,6 +113,12 @@ describe("salary analysis", () => {
     render(<SalaryAnalysis currencies={currencies} refreshKey={0} request={request} />);
 
     await screen.findByText("2026");
+    expect(screen.getByText("Latest evidenced pay period")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Mar 2026" })).toBeTruthy();
+    expect(screen.getByText("Receipt not linked")).toBeTruthy();
+    expect(screen.getByLabelText("Latest salary evidence for Mar 2026").textContent).toContain("Not available");
+    expect(screen.getByRole("region", { name: "Salary evidence needs attention" }).textContent)
+      .toContain("1 unmatched salary credit · 0 unclassified deductions");
     const trend = screen.getByRole("table", { name: /Payslip net pay and linked receipts.*exact values/ });
     expect(trend.textContent).toContain("Not available");
     expect(trend.textContent).toContain("A 2,500.00");

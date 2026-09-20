@@ -6,8 +6,11 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 
+import { ConsolePageHeader } from "@/app/ui/console-page-header";
+import { DataTableRegion } from "@/app/ui/data-table-region";
+import { StatusLabel } from "@/app/ui/status-label";
 import { LONG_REQUEST_TIMEOUT_MS, type apiFetch, errorText } from "@/lib/api/client";
 import { moneyText } from "@/lib/money/format";
 import { SalaryAnalysis } from "@/app/salary/salary-analysis";
@@ -416,24 +419,41 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
     form.payMonth && form.currency && form.grossEarnings && form.totalDeductions && form.netPay
       && form.lines.some((line) => line.kind === "earning" && line.label && line.amount),
   );
+  const unclassifiedDeductionCount = payslips?.reduce(
+    (count, payslip) => count + payslip.lines.filter(
+      (line) => line.kind === "deduction" && !line.countedAsSpending && !line.categoryId,
+    ).length,
+    0,
+  ) ?? 0;
 
   return (
     <section className="workspace-content salary-screen" aria-labelledby="salary-title">
-      <header>
-        <p className="eyebrow">Recorded evidence</p>
-        <h1 className="workspace-title" id="salary-title">Salary</h1>
-        <p>Payslips reconcile exactly or are refused; a correction supersedes rather than edits.</p>
-        <nav aria-label="Salary actions" className="salary-action-nav">
-          <Link href="#salary-import-title">Import a payslip</Link>
-          <Link href="#salary-entry-title">Enter manually</Link>
-          <Link href="#salary-list-title">Review payslips</Link>
-        </nav>
-      </header>
+      <div id="salary-title">
+        <ConsolePageHeader
+          title="Salary"
+          description="Evidenced pay, linked receipts and deductions. Corrections supersede; they never rewrite history."
+          actions={(
+            <nav aria-label="Salary actions" className="salary-action-nav">
+              <Link href="#salary-import-title">Import</Link>
+              <Link href="#salary-entry-title">Enter</Link>
+              <Link href="#salary-list-title">Review</Link>
+            </nav>
+          )}
+        />
+      </div>
 
-      <SalaryAnalysis currencies={currencies} refreshKey={attempt} request={request} />
+      <SalaryAnalysis
+        currencies={currencies}
+        refreshKey={attempt}
+        request={request}
+        unclassifiedDeductionCount={unclassifiedDeductionCount}
+      />
 
-      <section aria-labelledby="salary-list-title">
-        <h2 id="salary-list-title">Payslips</h2>
+      <section className="salary-payslips" aria-labelledby="salary-list-title">
+        <div className="console-section-head">
+          <h2 id="salary-list-title">Payslips</h2>
+          {payslips && <span>{payslips.length} recorded</span>}
+        </div>
         {loadState === "loading" && <p role="status">Loading payslips…</p>}
         {loadState === "error" && (
           <div role="alert">
@@ -443,126 +463,150 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
         )}
         {loadState === "ready" && payslips?.length === 0 && <p>No payslips are recorded yet.</p>}
         {loadState === "ready" && payslips && payslips.length > 0 && (
-          <ul className="salary-payslip-list">
-            {payslips.map((payslip) => {
-              return (
-                <li key={payslip.id}>
-                  <div>
-                    <strong>{payslip.payMonth}</strong>
-                    <span>{moneyText(payslip.netPay, payslip.currency, currencies)} net · {moneyText(payslip.grossEarnings, payslip.currency, currencies)} gross</span>
-                    <span>{depositState(payslip)}</span>
-                    {payslip.imported && <small>Imported</small>}
-                  </div>
-                  <ul className="salary-payslip-lines">
-                    {payslip.lines.map((line) => {
-                      const key = `${payslip.id}:${line.lineNo}`;
-                      const busy = spendingBusy === key;
-                      const chosenCategory = spendingCategoryFor(key, line);
-                      return (
-                        <li key={line.lineNo}>
-                          <span>{line.kind}: {line.label} {moneyText(line.amount, payslip.currency, currencies)}</span>
-                          {line.kind === "deduction" && (
-                            <span className="salary-line-spending">
-                              <label className="inline-flex items-center gap-2">
-                                <Checkbox
-                                  checked={line.countedAsSpending}
-                                  disabled={busy || (!line.countedAsSpending && !chosenCategory)}
-                                  onCheckedChange={() => void toggleSpending(payslip, line)}
-                                />
-                                Count as spending
-                              </label>
-                              <NativeSelect
-                                aria-label={`Category for deduction line ${line.lineNo}`}
-                                disabled={line.countedAsSpending || busy}
-                                onChange={(e) =>
-                                  setSpendingDraft((current) => ({ ...current, [key]: e.target.value }))
-                                }
-                                value={chosenCategory}
-                              >
-                                <option value="">Choose a category</option>
-                                {expenseCategories.map((row) => (
-                                  <option key={row.id} value={row.id}>{categoryLabel(row)}</option>
-                                ))}
-                              </NativeSelect>
-                              {spendingProblem?.key === key && (
-                                <span className="inline-alert" role="alert">{spendingProblem.message}</span>
-                              )}
-                            </span>
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                  <Button
-                    variant="outline"
-                    disabled={Boolean(payslip.deposit) || Boolean(payslip.supersededByPayslipId)}
-                    onClick={() => startCorrection(payslip)}
-                    type="button"
-                  >{payslip.deposit ? "Unlink before correcting" : "Correct"}</Button>
-
-                  {!payslip.supersededByPayslipId && (
-                    payslip.deposit ? (
-                      <>
+          <DataTableRegion label="Recorded payslips">
+            <table className="console-table salary-payslips-table">
+              <caption className="visually-hidden">Recorded payslips and their evidence</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Pay period</th>
+                  <th scope="col">Pay evidence</th>
+                  <th scope="col">Receipt</th>
+                  <th scope="col">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payslips.map((payslip) => (
+                  <Fragment key={payslip.id}>
+                    <tr>
+                      <th scope="row">
+                        {payslip.payMonth}
+                        {payslip.imported && <span className="salary-imported-mark">Imported</span>}
+                      </th>
+                      <td className="console-number salary-pay-evidence">
+                        {moneyText(payslip.netPay, payslip.currency, currencies)} net · {moneyText(payslip.grossEarnings, payslip.currency, currencies)} gross
+                      </td>
+                      <td>
+                        <StatusLabel tone={payslip.deposit?.eligible ? "success" : payslip.supersededByPayslipId ? "neutral" : "attention"}>
+                          {depositState(payslip)}
+                        </StatusLabel>
+                      </td>
+                      <td className="salary-payslip-actions">
                         <Button
                           variant="outline"
-                          disabled={linkBusy}
-                          onClick={() => void unlink(payslip)}
+                          disabled={Boolean(payslip.deposit) || Boolean(payslip.supersededByPayslipId)}
+                          onClick={() => startCorrection(payslip)}
                           type="button"
-                        >Unlink</Button>
+                        >{payslip.deposit ? "Unlink before correcting" : "Correct"}</Button>
+                        {!payslip.supersededByPayslipId && (
+                          payslip.deposit ? (
+                            <Button
+                              variant="outline"
+                              disabled={linkBusy}
+                              onClick={() => void unlink(payslip)}
+                              type="button"
+                            >Unlink</Button>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              disabled={candidatesBusy}
+                              onClick={() => void findCandidates(payslip)}
+                              type="button"
+                            >Find net-pay credit</Button>
+                          )
+                        )}
+                      </td>
+                    </tr>
+                    <tr className="salary-payslip-detail">
+                      <td colSpan={4}>
+                        <ul className="salary-payslip-lines">
+                          {payslip.lines.map((line) => {
+                            const key = `${payslip.id}:${line.lineNo}`;
+                            const busy = spendingBusy === key;
+                            const chosenCategory = spendingCategoryFor(key, line);
+                            return (
+                              <li key={line.lineNo}>
+                                <span className="salary-line-evidence">
+                                  {line.kind}: {line.label} {moneyText(line.amount, payslip.currency, currencies)}
+                                </span>
+                                {line.kind === "deduction" && (
+                                  <span className="salary-line-spending">
+                                    <label className="inline-flex items-center gap-2">
+                                      <Checkbox
+                                        checked={line.countedAsSpending}
+                                        disabled={busy || (!line.countedAsSpending && !chosenCategory)}
+                                        onCheckedChange={() => void toggleSpending(payslip, line)}
+                                      />
+                                      Count as spending
+                                    </label>
+                                    <NativeSelect
+                                      aria-label={`Category for deduction line ${line.lineNo}`}
+                                      disabled={line.countedAsSpending || busy}
+                                      onChange={(e) =>
+                                        setSpendingDraft((current) => ({ ...current, [key]: e.target.value }))
+                                      }
+                                      value={chosenCategory}
+                                    >
+                                      <option value="">Choose a category</option>
+                                      {expenseCategories.map((row) => (
+                                        <option key={row.id} value={row.id}>{categoryLabel(row)}</option>
+                                      ))}
+                                    </NativeSelect>
+                                    {spendingProblem?.key === key && (
+                                      <span className="inline-alert" role="alert">{spendingProblem.message}</span>
+                                    )}
+                                  </span>
+                                )}
+                              </li>
+                            );
+                          })}
+                        </ul>
                         {unlinkFor === payslip.id && unlinkProblem && (
                           <p className="inline-alert" role="alert">{unlinkProblem}</p>
                         )}
-                      </>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        disabled={candidatesBusy}
-                        onClick={() => void findCandidates(payslip)}
-                        type="button"
-                      >Find net-pay credit</Button>
-                    )
-                  )}
 
-                  {candidatesFor === payslip.id && (
-                    <div className="salary-deposit-candidates">
-                      {candidatesBusy && <p role="status">Looking for candidates…</p>}
-                      {candidatesProblem && <p className="inline-alert" role="alert">{candidatesProblem}</p>}
-                      {candidates && candidates.length === 0 && <p>No eligible credit was found.</p>}
-                      {candidates && candidates.length > 0 && (
-                        <ul>
-                          {candidates.map((candidate) => (
-                            <li key={candidate.transactionId}>
-                              <span>{candidate.bookedDate} · {moneyText(candidate.amount, candidate.currency, currencies)} · {candidate.description}</span>
-                              <Button
-                                variant="outline"
-                                onClick={() => setConfirmingCandidate(candidate)}
-                                type="button"
-                              >Link</Button>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                      {confirmingCandidate && (
-                        <div role="alertdialog">
-                          <p>Link the credit on {confirmingCandidate.bookedDate} to this payslip&rsquo;s net pay?</p>
-                          <Button variant="default" disabled={linkBusy} onClick={() => void confirmLink(payslip)} type="button">
-                            {linkBusy ? "Linking…" : "Confirm link"}
-                          </Button>
-                          <Button variant="outline" onClick={() => setConfirmingCandidate(undefined)} type="button">Cancel</Button>
-                        </div>
-                      )}
-                      <Button variant="outline" onClick={cancelCandidates} type="button">Close</Button>
-                    </div>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+                        {candidatesFor === payslip.id && (
+                          <div className="salary-deposit-candidates">
+                            {candidatesBusy && <p role="status">Looking for candidates…</p>}
+                            {candidatesProblem && <p className="inline-alert" role="alert">{candidatesProblem}</p>}
+                            {candidates && candidates.length === 0 && <p>No eligible credit was found.</p>}
+                            {candidates && candidates.length > 0 && (
+                              <ul>
+                                {candidates.map((candidate) => (
+                                  <li key={candidate.transactionId}>
+                                    <span>{candidate.bookedDate} · {moneyText(candidate.amount, candidate.currency, currencies)} · {candidate.description}</span>
+                                    <Button
+                                      variant="outline"
+                                      onClick={() => setConfirmingCandidate(candidate)}
+                                      type="button"
+                                    >Link</Button>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                            {confirmingCandidate && (
+                              <div role="alertdialog">
+                                <p>Link the credit on {confirmingCandidate.bookedDate} to this payslip&rsquo;s net pay?</p>
+                                <Button variant="default" disabled={linkBusy} onClick={() => void confirmLink(payslip)} type="button">
+                                  {linkBusy ? "Linking…" : "Confirm link"}
+                                </Button>
+                                <Button variant="outline" onClick={() => setConfirmingCandidate(undefined)} type="button">Cancel</Button>
+                              </div>
+                            )}
+                            <Button variant="outline" onClick={cancelCandidates} type="button">Close</Button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </DataTableRegion>
         )}
       </section>
 
-      <section aria-labelledby="salary-entry-title">
-        <h2 id="salary-entry-title">{correcting ? `Correct ${correcting.payMonth}` : "Enter a payslip"}</h2>
+      <section className="salary-work-panel" aria-labelledby="salary-entry-title">
+        <div className="console-section-head"><h2 id="salary-entry-title">{correcting ? `Correct ${correcting.payMonth}` : "Enter a payslip"}</h2></div>
         <label className="date-field">
           <span>Pay month</span>
           <Input onChange={(e) => changeForm("payMonth", e.target.value)} type="month" value={form.payMonth} />
@@ -602,8 +646,8 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
         {correcting && <Button variant="outline" onClick={cancelCorrection} type="button">Cancel correction</Button>}
       </section>
 
-      <section aria-labelledby="salary-import-title">
-        <h2 id="salary-import-title">Import from a PDF</h2>
+      <section className="salary-work-panel" aria-labelledby="salary-import-title">
+        <div className="console-section-head"><h2 id="salary-import-title">Import from a PDF</h2></div>
         <label className="file-field">
           <span>Payslip file</span>
           <Input accept="application/pdf,.pdf" disabled={importBusy} onChange={(e) => chooseFile(e.target.files)} type="file" />
@@ -653,8 +697,8 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
         )}
       </section>
 
-      <section aria-labelledby="salary-deduction-rules-title">
-        <h2 id="salary-deduction-rules-title">Deduction rules</h2>
+      <section className="salary-work-panel salary-deduction-panel" aria-labelledby="salary-deduction-rules-title">
+        <div className="console-section-head"><h2 id="salary-deduction-rules-title">Deduction rules</h2></div>
         <p>
           A rule remembers a deduction label&rsquo;s spending category. It affects payslips linked
           afterwards, not deductions already counted as spending.
