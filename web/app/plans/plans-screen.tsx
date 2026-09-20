@@ -6,6 +6,8 @@ import { NativeSelect } from "@/components/ui/native-select";
 
 import { useCallback, useEffect, useState } from "react";
 
+import { ConsolePageHeader } from "@/app/ui/console-page-header";
+import { DataToolbar } from "@/app/ui/data-toolbar";
 import { type apiFetch, errorText } from "@/lib/api/client";
 import { moneyText } from "@/lib/money/format";
 import type {
@@ -375,49 +377,33 @@ export function PlansScreen({ accounts, currencies, request, householdCurrencies
 
   return (
     <section className="workspace-content plans-screen" aria-labelledby="plans-title">
-      <header>
-        <p className="eyebrow">Read-only projection</p>
-        <h1 className="workspace-title" id="plans-title">Plans</h1>
-        <p>Commitments drive a 30, 60 and 90-day forecast; the forecast itself posts nothing.</p>
-      </header>
+      <div id="plans-title">
+        <ConsolePageHeader
+          title="Plans"
+          description="Commitments, reserves and goals presented as decisions. Forecasts remain read-only."
+          actions={<a className="plans-create-link" href="#commitment-editor">Create plan</a>}
+        />
+      </div>
 
-      <nav aria-label="On this page">
-        <ul className="plans-page-nav">
-          <li><a href="#actions">Needs attention</a></li>
-          <li><a href="#review">Monthly review</a></li>
-          <li><a href="#goals">Goals</a></li>
-          <li><a href="#reserve">Emergency reserve</a></li>
-          <li><a href="#register">Register</a></li>
-          <li><a href="#forecast">Forecast</a></li>
-          <li><a href="#commitments">Commitments</a></li>
-        </ul>
-      </nav>
+      <DataToolbar label="Plan sections" summary="30 / 60 / 90-day evidence">
+        <nav aria-label="On this page">
+          <ul className="plans-page-nav">
+            <li><a href="#actions">Attention</a></li>
+            <li><a href="#forecast">Forecast</a></li>
+            <li><a href="#review">Review</a></li>
+            <li><a href="#reserve">Reserve</a></li>
+            <li><a href="#goals">Goals</a></li>
+            <li><a href="#commitments">Commitments</a></li>
+            <li><a href="#register">Register</a></li>
+          </ul>
+        </nav>
+      </DataToolbar>
 
       <NeedsAttention
         accounts={accounts}
         currencies={currencies}
         onCommitmentResolved={() => setAttempt((value) => value + 1)}
         onPlanCardPayment={startCardPlan}
-        onSettle={(commitmentId) => setSettlingId(commitmentId)}
-        refreshKey={attempt}
-        request={request}
-      />
-
-      <MonthlyReview accounts={accounts} currencies={currencies} request={request} />
-
-      <Goals
-        accounts={accounts}
-        currencies={currencies}
-        householdCurrencies={householdCurrencies}
-        request={request}
-      />
-
-      <EmergencyReserve accounts={accounts} currencies={currencies} request={request} />
-
-      <Register
-        accounts={accounts}
-        currencies={currencies}
-        onPlanFromRecord={startRecordPlan}
         onSettle={(commitmentId) => setSettlingId(commitmentId)}
         refreshKey={attempt}
         request={request}
@@ -432,8 +418,22 @@ export function PlansScreen({ accounts, currencies, request, householdCurrencies
         request={request}
       />
 
-      <section aria-labelledby="plans-commitments-title" id="commitments">
-        <h2 id="plans-commitments-title">Commitments</h2>
+      <MonthlyReview accounts={accounts} currencies={currencies} request={request} />
+
+      <EmergencyReserve accounts={accounts} currencies={currencies} request={request} />
+
+      <Goals
+        accounts={accounts}
+        currencies={currencies}
+        householdCurrencies={householdCurrencies}
+        request={request}
+      />
+
+      <section className="plans-commitments-section" aria-labelledby="plans-commitments-title" id="commitments">
+        <div className="console-section-head">
+          <h2 id="plans-commitments-title">Commitments</h2>
+          {commitments && <span>{commitments.length} recorded</span>}
+        </div>
         {commitmentsFailed && (
           <div role="alert">
             <p>The commitments could not be loaded.</p>
@@ -511,6 +511,7 @@ export function PlansScreen({ accounts, currencies, request, householdCurrencies
           </ul>
         )}
 
+        <div className="plans-context-panel" id="commitment-editor">
         <h3>
           {editing
             ? `Edit ${editing.label}`
@@ -581,7 +582,17 @@ export function PlansScreen({ accounts, currencies, request, householdCurrencies
         {(editing || planningCard || planningRecord) && (
           <Button variant="outline" onClick={cancelEdit} type="button">Cancel</Button>
         )}
+        </div>
       </section>
+
+      <Register
+        accounts={accounts}
+        currencies={currencies}
+        onPlanFromRecord={startRecordPlan}
+        onSettle={(commitmentId) => setSettlingId(commitmentId)}
+        refreshKey={attempt}
+        request={request}
+      />
     </section>
   );
 }

@@ -471,8 +471,8 @@ export function Register({
   const accountOptionsForKind = activeKind === "deposit" ? depositAccounts : accounts;
 
   return (
-    <section aria-labelledby="register-title" id="register">
-      <h2 id="register-title">Register</h2>
+    <section className="plans-register-section" aria-labelledby="register-title" id="register">
+      <div className="console-section-head"><h2 id="register-title">Register</h2></div>
 
       {state === "loading" && <p role="status">Loading the register…</p>}
       {state === "error" && (

@@ -265,8 +265,8 @@ export function EmergencyReserve({ accounts, currencies, request }: Props) {
   );
 
   return (
-    <section aria-labelledby="reserve-title" id="reserve">
-      <h2 id="reserve-title">Emergency reserve</h2>
+    <section className="plans-reserve-section" aria-labelledby="reserve-title" id="reserve">
+      <div className="console-section-head"><h2 id="reserve-title">Emergency reserve</h2></div>
 
       {state === "loading" && <p role="status">Loading the emergency reserve…</p>}
       {state === "error" && (

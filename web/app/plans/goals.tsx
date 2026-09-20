@@ -272,8 +272,8 @@ export function Goals({ accounts, currencies, householdCurrencies, request }: Pr
   const reservingAccount = data?.accounts.find((row) => row.accountId === reserveForm.accountId);
 
   return (
-    <section aria-labelledby="goals-title" id="goals">
-      <h2 id="goals-title">Goals</h2>
+    <section className="plans-goals-section" aria-labelledby="goals-title" id="goals">
+      <div className="console-section-head"><h2 id="goals-title">Goals</h2></div>
 
       {state === "loading" && <p role="status">Loading goals…</p>}
       {state === "error" && (

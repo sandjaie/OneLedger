@@ -121,8 +121,8 @@ export function MonthlyReview({ accounts, currencies, request }: Props) {
   const activeAccounts = accounts.filter((account) => account.isActive);
 
   return (
-    <section aria-labelledby="review-title" id="review">
-      <h2 id="review-title">Monthly review</h2>
+    <section className="plans-review-section" aria-labelledby="review-title" id="review">
+      <div className="console-section-head"><h2 id="review-title">Monthly review</h2></div>
       <label className="month-field">
         <span>Month</span>
         <Input

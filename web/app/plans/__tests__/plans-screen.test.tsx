@@ -703,7 +703,7 @@ describe("plans screen", () => {
     await screen.findByText("No commitments are recorded yet.");
     const nav = screen.getByRole("navigation", { name: "On this page" });
     const hrefs = Array.from(nav.querySelectorAll("a")).map((a) => a.getAttribute("href"));
-    expect(hrefs).toEqual(["#actions", "#review", "#goals", "#reserve", "#register", "#forecast", "#commitments"]);
+    expect(hrefs).toEqual(["#actions", "#forecast", "#review", "#reserve", "#goals", "#commitments", "#register"]);
     expect(document.getElementById("commitments")).toBeTruthy();
   });
 });
