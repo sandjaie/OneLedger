@@ -356,7 +356,7 @@ export function FundingPanel({ events, request, existingLinks = [], allowAdditio
   const removingTransaction = transactionFor(removingCashId);
 
   return (
-    <section aria-labelledby="funding-title" className="investment-funding-panel">
+    <section aria-labelledby="funding-title" className="investment-funding-panel investment-context-workflow">
       <div className="investment-docket-head">
         <div>
           <p className="section-label">Cash evidence</p>

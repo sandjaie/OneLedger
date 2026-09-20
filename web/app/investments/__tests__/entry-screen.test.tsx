@@ -181,7 +181,7 @@ describe("investment entry", () => {
     expect(screen.getByText("Loading recorded holdings…")).toBeTruthy();
     release(positions([position]));
 
-    const holding = await screen.findByRole("article", { name: candidate.name });
+    const holding = await screen.findByRole("row", { name: candidate.name });
     expect(within(holding).getByText("3.12500000 units")).toBeTruthy();
     expect(within(holding).getByText("XAA 28.1250")).toBeTruthy();
     expect(within(holding).getByText("Price XAA 9.000000 · 6 Feb 2026")).toBeTruthy();
@@ -199,7 +199,7 @@ describe("investment entry", () => {
 
     first.unmount();
     renderScreen(requestFrom(() => positions([missing])));
-    const holding = await screen.findByRole("article", { name: candidate.name });
+    const holding = await screen.findByRole("row", { name: candidate.name });
     expect(within(holding).getByText("Only future-dated price evidence is recorded.")).toBeTruthy();
     expect(within(holding).getByText("Current value unavailable")).toBeTruthy();
     expect(within(holding).queryByText(/XAA 0/)).toBeNull();
@@ -219,7 +219,7 @@ describe("investment entry", () => {
     };
     renderScreen(requestFrom(() => positions([staleOutside])));
 
-    const holding = await screen.findByRole("article", { name: candidate.name });
+    const holding = await screen.findByRole("row", { name: candidate.name });
     expect(within(holding).getByText("Price XAA 9.000000 · 6 Feb 2026")).toBeTruthy();
     expect(within(holding).getByText("The latest recorded price is stale.")).toBeTruthy();
     expect(within(holding).getByText("The exact value is outside the supported reporting range.")).toBeTruthy();
@@ -463,7 +463,7 @@ describe("investment entry", () => {
     fireEvent.click(screen.getByRole("button", { name: "Review purchase" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirm purchase" }));
 
-    expect(await screen.findByRole("article", { name: candidate.name })).toBeTruthy();
+    expect(await screen.findByRole("row", { name: candidate.name })).toBeTruthy();
     const priceCall = vi.mocked(request).mock.calls.find(([path]) => path.includes("manual-prices"));
     expect(priceCall?.[0]).toBe(`/investment-catalogue/securities/${candidate.id}/manual-prices`);
     expect(JSON.parse(String(priceCall?.[1]?.body))).toEqual({ priceDate: "2026-02-06", price: "9.000000" });
@@ -538,7 +538,7 @@ describe("investment entry", () => {
     expect(screen.getByRole("button", { name: "Recording dated price…" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Recording purchase…" })).toBeNull();
     releasePrice({ status: "recorded" });
-    await screen.findByRole("article", { name: candidate.name });
+    await screen.findByRole("row", { name: candidate.name });
 
     expect(vi.mocked(request).mock.calls.filter(([path]) => path === "/investment-events/acquisitions")).toHaveLength(1);
     expect(randomUUID).toHaveBeenCalledTimes(1);
@@ -586,7 +586,7 @@ describe("investment entry", () => {
     expect(screen.getByRole("button", { name: "Reloading holdings…" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Recording purchase…" })).toBeNull();
     releaseHoldings(positions([position]));
-    await screen.findByRole("article", { name: candidate.name });
+    await screen.findByRole("row", { name: candidate.name });
 
     expect(vi.mocked(request).mock.calls.filter(([path]) => path === "/investment-events/acquisitions")).toHaveLength(1);
     expect(randomUUID).toHaveBeenCalledTimes(1);
@@ -604,7 +604,7 @@ describe("investment entry", () => {
 
     expect(await screen.findByText("Recorded holdings could not be loaded.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-    await screen.findByRole("article", { name: candidate.name });
+    await screen.findByRole("row", { name: candidate.name });
     expect(reads).toBe(2);
   });
 

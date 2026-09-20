@@ -260,7 +260,7 @@ export function InvestmentEventForm({ request, accounts, holding, onRecorded }: 
   const fields = isCashKind(kind) ? CASH_FIELDS[kind] : [];
 
   return (
-    <form className="investment-record-event" onSubmit={(e) => { e.preventDefault(); review(); }}>
+    <form className="investment-record-event investment-context-workflow" onSubmit={(e) => { e.preventDefault(); review(); }}>
       <h3>Record an event</h3>
       {feedback && <p className="investment-feedback" role="status">{feedback}</p>}
       {positionsState === "error" && (

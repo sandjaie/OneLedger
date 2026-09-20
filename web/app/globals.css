@@ -1476,16 +1476,11 @@ body { background: var(--paper); }
 .portfolio-price-status p { margin: 4px 0 0; color: var(--muted); font-size: 0.78rem; }
 .portfolio-allocation-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px; }
 .portfolio-allocation-groups h3 { margin: 0 0 6px; font-size: 0.78rem; }
-.portfolio-allocation-groups dl,
-.holding-screen dl { display: grid; gap: 6px; margin: 0; }
-.portfolio-allocation-groups dl div,
-.holding-screen dl div { display: flex; justify-content: space-between; gap: 12px; font-size: 0.78rem; }
-.portfolio-allocation-groups dt,
-.holding-screen dt { color: var(--muted); }
+.portfolio-allocation-groups dl { display: grid; gap: 6px; margin: 0; }
+.portfolio-allocation-groups dl div { display: flex; justify-content: space-between; gap: 12px; font-size: 0.78rem; }
+.portfolio-allocation-groups dt { color: var(--muted); }
 .analysis-benchmarks { display: grid; gap: 10px; }
 .analysis-benchmarks label { display: grid; gap: 4px; max-width: 28rem; }
-.holding-screen dl.portfolio-metrics { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
-.holding-screen dl.portfolio-metrics div { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--rule); }
 
 /* Coverage grid — a text-labelled month-by-month table (spec: colour is never the only signal). */
 .coverage-screen { max-width: 100%; }
@@ -3555,4 +3550,172 @@ body {
   .portfolio-start-actions > a { flex: 1 1 100%; }
   .portfolio-screen .allocation-evidence-chart table { table-layout: auto; }
   .portfolio-screen .allocation-evidence-chart :is(th, td) { white-space: nowrap; }
+}
+
+/* Phase 4.8 Task 7 — holding and investment writes share the compact evidence-table and
+   contextual-workflow grammar. Exact strings and server-checked review states remain visible. */
+.workspace-content:is(.holding-screen, .investment-entry-screen) {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  max-width: none;
+  min-width: 0;
+}
+.workspace-content:is(.holding-screen, .investment-entry-screen) > * { min-width: 0; }
+:is(.holding-screen, .investment-entry-screen) .console-page-header { margin-bottom: 0; }
+.holding-screen .metric-strip { padding-block: 14px; }
+
+.holding-evidence-section,
+.holding-review-band,
+.investment-holdings { display: grid; gap: 12px; min-width: 0; }
+.holding-review-band {
+  padding: 14px 16px;
+  border: 1px solid var(--console-line);
+  border-left: 3px solid var(--console-amber);
+  border-radius: 7px;
+  background: var(--console-soft);
+}
+.holding-review-band ul { display: grid; gap: 4px; margin: 0; padding-left: 18px; color: var(--console-muted); font-size: 12px; }
+.holding-screen .data-table-region,
+.investment-entry-screen .data-table-region { border-bottom: 1px solid var(--console-line); }
+.holding-events-table { min-width: 900px; }
+.holding-prices-table,
+.holding-cash-table { min-width: 520px; }
+.holding-lots-table { min-width: 760px; }
+.holding-funding-table { min-width: 720px; }
+.holding-events-table :is(th, td),
+.holding-funding-table :is(th, td),
+.investment-entry-holdings-table :is(th, td) { vertical-align: top; }
+.holding-events-table tbody th,
+.holding-funding-table tbody th,
+.investment-entry-holdings-table tbody th { white-space: normal; }
+.holding-events-table tbody th > span,
+.holding-funding-table tbody th > span,
+.investment-entry-holdings-table tbody th > span { display: block; }
+.holding-state-note { display: block; max-width: 235px; margin-top: 4px; color: var(--console-muted); font-size: 11px; line-height: 1.4; white-space: normal; }
+.holding-table-actions { display: flex; justify-content: flex-end; gap: 6px; }
+
+.investment-context-panel,
+.investment-entry-screen .investment-entry-docket,
+.investment-entry-screen > .investment-funding-panel {
+  display: grid;
+  gap: 16px;
+  padding: 18px 20px;
+  border: 1px solid var(--console-line);
+  border-left: 3px solid var(--console-blue);
+  border-radius: 7px;
+  background: var(--console-soft);
+}
+.investment-context-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--console-line);
+}
+.investment-context-panel-head p { margin: 0 0 3px; color: var(--console-muted); font-size: 10px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; }
+.investment-context-panel-head h3 { margin: 0; font-family: inherit; font-size: 15px; font-weight: 650; letter-spacing: normal; }
+.investment-context-workflow {
+  min-width: 0;
+  border-color: var(--console-line);
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
+}
+.investment-context-panel > .investment-context-workflow {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.investment-context-panel .investment-record-event > h3 { margin-top: 0; }
+.investment-context-panel .investment-correction-form { padding-top: 14px; }
+.investment-context-panel .investment-lot-allocation-panel > .section-label { margin-top: 0; }
+.investment-context-panel .investment-lot-allocation-panel > h3 { margin-top: 0; }
+.investment-record-event {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: end;
+  gap: 12px;
+}
+.investment-record-event > :is(h3, .investment-feedback, .investment-state, .inline-alert, .investment-confirmation) { grid-column: 1 / -1; }
+.investment-record-event > h3 { margin-bottom: 0; font-size: 14px; }
+.investment-record-event > [data-slot="button"] { justify-self: start; }
+.investment-correction-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+  gap: 12px;
+  margin: 0;
+}
+.investment-correction-form > :is(.investment-confirmation, .inline-alert) { grid-column: 1 / -1; }
+.investment-correction-form > [data-slot="button"] { justify-self: start; }
+.investment-lot-allocation-panel { display: grid; gap: 12px; }
+.investment-lot-allocation-drafts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 12px; }
+.investment-lot-allocation-drafts > [data-slot="button"] { justify-self: start; }
+.holding-screen .investment-record-price {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.45fr) minmax(190px, 0.55fr) auto;
+  align-items: end;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.holding-screen .investment-record-price > :is(.inline-alert, .wealth-refresh-notice) { grid-column: 1 / -1; }
+
+.investment-entry-screen .investment-evidence-rail { gap: 0; }
+.investment-entry-screen .investment-evidence-rail li {
+  padding: 8px 10px;
+  border-top-width: 2px;
+  border-top-color: var(--console-line-strong);
+  color: var(--console-muted);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 650;
+}
+.investment-entry-screen .investment-evidence-rail li.complete { border-top-color: var(--console-green); color: var(--console-green); }
+.investment-entry-screen .investment-evidence-rail li.current { border-top-color: var(--console-blue); color: var(--console-ink); }
+.investment-entry-screen .investment-holdings { padding: 0; border: 0; border-radius: 0; background: transparent; }
+.investment-entry-screen .investment-holdings .console-section-head > small { color: var(--console-muted); font-size: 12px; }
+.investment-entry-holdings-table { min-width: 940px; }
+.investment-entry-price-evidence { min-width: 205px; white-space: normal !important; }
+.investment-entry-status { min-width: 230px; white-space: normal !important; }
+.investment-entry-status > span:not(.status-label) { display: block; margin-top: 4px; color: var(--console-muted); font-size: 11px; line-height: 1.4; }
+.investment-entry-screen .investment-entry-docket { border-top-width: 1px; }
+.investment-entry-screen .investment-entry-docket h2,
+.investment-entry-screen .investment-funding-panel h2 { font-family: inherit; font-size: 16px; font-weight: 650; letter-spacing: normal; }
+.investment-entry-screen .investment-docket-head > small { color: var(--console-muted); font-size: 11px; }
+.investment-entry-screen .investment-confirmation,
+.investment-context-panel .investment-confirmation,
+.investment-context-panel .investment-funding-proposal,
+.investment-context-panel .investment-funding-removal,
+.investment-context-panel .investment-lot-allocation-proposal {
+  border-color: var(--console-line-strong);
+  border-top-width: 1px;
+  background: #fff;
+  box-shadow: none;
+}
+
+@media (max-width: 760px) {
+  .investment-context-panel,
+  .investment-entry-screen .investment-entry-docket,
+  .investment-entry-screen > .investment-funding-panel { padding: 16px; }
+  .holding-screen .investment-record-price { grid-template-columns: minmax(0, 1fr); }
+  .holding-screen .investment-record-price > :is(.inline-alert, .wealth-refresh-notice) { grid-column: auto; }
+  .investment-record-event,
+  .investment-correction-form,
+  .investment-lot-allocation-drafts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 588px) {
+  .investment-context-panel-head { align-items: stretch; flex-direction: column; }
+  .investment-context-panel-head > [data-slot="button"] { align-self: flex-start; }
+  .holding-table-actions { justify-content: flex-start; }
+  .investment-record-event,
+  .investment-correction-form,
+  .investment-lot-allocation-drafts { grid-template-columns: minmax(0, 1fr); }
+  .investment-record-event > :is(h3, .investment-feedback, .investment-state, .inline-alert, .investment-confirmation),
+  .investment-correction-form > :is(.investment-confirmation, .inline-alert) { grid-column: auto; }
 }

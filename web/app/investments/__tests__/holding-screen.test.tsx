@@ -96,10 +96,15 @@ function detail(overrides: Partial<HoldingDetail> = {}): HoldingDetail {
   };
 }
 
-function requestFrom(handler: (path: string, init?: RequestInit) => unknown | Promise<unknown>): Request {
+function requestFrom(
+  handler: (path: string, init?: RequestInit) => unknown | Promise<unknown>,
+  holdingLots: Array<HoldingLotRow> = [],
+): Request {
   // `async` wraps a synchronous `throw` inside `handler` into a rejected promise, matching a
   // real fetch failure rather than an uncaught exception during the effect that calls it.
-  return vi.fn(async (path: string, init?: RequestInit) => handler(path, init)) as Request;
+  return vi.fn(async (path: string, init?: RequestInit) => (
+    path === `/portfolio/holdings/${HOLDING_ID}/lots` ? holdingLots : handler(path, init)
+  )) as Request;
 }
 
 afterEach(cleanup);
@@ -176,6 +181,92 @@ describe("HoldingScreen", () => {
 
     expect(screen.getByText("Unlink its funding first to correct this event.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Correct" })).toBeNull();
+  });
+
+  it("returns focus to the event action after closing its contextual correction panel", async () => {
+    const request = requestFrom((path) => {
+      if (path === "/portfolio/positions") return { asOf: "2026-02-06", baseCurrency: "XAA", secondaryCurrency: "XBB", positions: [] };
+      if (path === `/portfolio/holdings/${HOLDING_ID}`) {
+        return detail({ cashLinks: [], events: [{ ...detail().events[0], fundingComplete: false }] });
+      }
+      throw new Error(`Unexpected synthetic route ${path}`);
+    });
+
+    render(<HoldingScreen accounts={[]} holdingId={HOLDING_ID} request={request} />);
+    await screen.findByRole("heading", { name: "Synthetic Growth Fund" });
+
+    const trigger = screen.getByRole("button", { name: "Correct" });
+    trigger.focus();
+    fireEvent.click(trigger);
+    expect(screen.getByRole("region", { name: "Correct purchase event" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close correction panel" }));
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+  });
+
+  it("returns focus to the event action after a correction succeeds", async () => {
+    const request = requestFrom((path, init) => {
+      if (path === "/portfolio/positions") return { asOf: "2026-02-06", baseCurrency: "XAA", secondaryCurrency: "XBB", positions: [] };
+      if (path === `/portfolio/holdings/${HOLDING_ID}`) {
+        return detail({ cashLinks: [], events: [{ ...detail().events[0], fundingComplete: false }] });
+      }
+      if (path === `/investment-events/${detail().events[0].id}/corrections` && init?.method === "POST") return {};
+      throw new Error(`Unexpected synthetic route ${init?.method ?? "GET"} ${path}`);
+    });
+
+    render(<HoldingScreen accounts={[]} holdingId={HOLDING_ID} request={request} />);
+    await screen.findByRole("heading", { name: "Synthetic Growth Fund" });
+
+    const trigger = screen.getByRole("button", { name: "Correct" });
+    trigger.focus();
+    fireEvent.click(trigger);
+    fireEvent.change(screen.getByLabelText("Correction reason"), { target: { value: "Synthetic correction" } });
+    fireEvent.click(screen.getByRole("button", { name: "Review correction" }));
+    const confirm = screen.getByRole("button", { name: "Confirm correction" });
+    confirm.focus();
+    fireEvent.click(confirm);
+
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+  });
+
+  it("hides stale lot rows while refreshed lot evidence is pending", async () => {
+    const lot: HoldingLotRow = {
+      lotId: "00000000-0000-4000-8000-000000000092",
+      acquisitionEventId: detail().events[0].id,
+      acquiredOn: "2026-01-05",
+      acquiredUnits: "7.77770000",
+      remainingUnits: "7.77770000",
+      costBasisNative: "77.7700",
+      eligible: true,
+    };
+    let holdingLoads = 0;
+    let lotLoads = 0;
+    const request = vi.fn(async (path: string, init?: RequestInit) => {
+      if (path === "/portfolio/positions") return { asOf: "2026-02-06", baseCurrency: "XAA", secondaryCurrency: "XBB", positions: [] };
+      if (path === `/portfolio/holdings/${HOLDING_ID}`) {
+        holdingLoads += 1;
+        return detail();
+      }
+      if (path === `/portfolio/holdings/${HOLDING_ID}/lots`) {
+        lotLoads += 1;
+        if (lotLoads === 1) return [lot];
+        return new Promise<Array<HoldingLotRow>>(() => undefined);
+      }
+      if (path === "/investment-catalogue/securities/00000000-0000-4000-8000-000000000040/manual-prices" && init?.method === "POST") {
+        return { id: "price-2", securityId: detail().securityId, priceDate: "2026-02-11", price: "11.500000", currency: "XAA", status: "recorded" };
+      }
+      throw new Error(`Unexpected synthetic route ${init?.method ?? "GET"} ${path}`);
+    }) as Request;
+
+    render(<HoldingScreen accounts={[]} holdingId={HOLDING_ID} request={request} />);
+    expect(await screen.findAllByText("7.77770000")).toHaveLength(2);
+    fireEvent.change(screen.getByLabelText("Price date"), { target: { value: "2026-02-11" } });
+    fireEvent.change(screen.getByLabelText("Price (XAA)"), { target: { value: "11.500000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Record price" }));
+
+    await waitFor(() => expect(holdingLoads).toBe(2));
+    expect(await screen.findByText("Loading lots…")).toBeTruthy();
+    expect(screen.queryAllByText("7.77770000")).toHaveLength(0);
   });
 
   it("records a dated price with the exact strings typed and reloads the holding", async () => {
@@ -495,7 +586,6 @@ describe("HoldingScreen", () => {
         holdingLoads += 1;
         return holdingLoads === 1 ? openDetail : resolvedDetail;
       }
-      if (path === `/portfolio/holdings/${HOLDING_ID}/lots`) return lots;
       if (path === "/investment-funding/lot-allocation-proposals" && init?.method === "POST") {
         expect(JSON.parse(String(init.body))).toEqual({
           disposalEventId,
@@ -512,23 +602,28 @@ describe("HoldingScreen", () => {
         return confirmation;
       }
       throw new Error(`Unexpected synthetic route ${init?.method ?? "GET"} ${path}`);
-    });
+    }, lots);
 
     render(<HoldingScreen accounts={[]} holdingId={HOLDING_ID} request={request} />);
     await screen.findByRole("heading", { name: "Synthetic Growth Fund" });
 
-    fireEvent.click(screen.getByRole("button", { name: "Allocate lots" }));
+    const allocationTrigger = screen.getByRole("button", { name: "Allocate lots" });
+    allocationTrigger.focus();
+    fireEvent.click(allocationTrigger);
     await screen.findByRole("heading", { name: "Allocate lots" });
     const unitsInput = await screen.findByLabelText(/Acquired 5 Jan 2026/);
     fireEvent.change(unitsInput, { target: { value: "5.00000000" } });
     fireEvent.click(screen.getByRole("button", { name: "Review allocation proposal" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Confirm allocation" }));
+    const confirmAllocation = await screen.findByRole("button", { name: "Confirm allocation" });
+    confirmAllocation.focus();
+    fireEvent.click(confirmAllocation);
 
     await waitFor(() => expect(holdingLoads).toBe(2));
     expect(
       await screen.findByText(/Lot allocation confirmed\. The events below show the refreshed state\./),
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Allocate lots" })).toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("heading", { name: "Events (2 of 2)" })));
     const confirmed = screen.getByLabelText("Confirmed lot allocation");
     expect(confirmed.textContent).toContain("50.5000");
     expect(confirmed.textContent).toContain("9.5000");
@@ -559,7 +654,6 @@ describe("HoldingScreen", () => {
     const request = requestFrom((path, init) => {
       if (path === "/portfolio/positions") return { asOf: "2026-02-06", baseCurrency: "XAA", secondaryCurrency: "XBB", positions: [] };
       if (path === `/portfolio/holdings/${HOLDING_ID}`) return openDetail;
-      if (path === `/portfolio/holdings/${HOLDING_ID}/lots`) return lots;
       if (path === "/investment-funding/lot-allocation-proposals" && init?.method === "POST") {
         const body = JSON.parse(String(init.body)) as { allocations: Array<{ allocatedUnits: string }> };
         return {
@@ -574,7 +668,7 @@ describe("HoldingScreen", () => {
         throw new ApiError(500, "Synthetic failure");
       }
       throw new Error(`Unexpected synthetic route ${init?.method ?? "GET"} ${path}`);
-    });
+    }, lots);
 
     render(<HoldingScreen accounts={[]} holdingId={HOLDING_ID} request={request} />);
     await screen.findByRole("heading", { name: "Synthetic Growth Fund" });
