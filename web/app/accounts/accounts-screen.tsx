@@ -449,16 +449,9 @@ export function AccountsScreen({
   // Focus returns to the row action that opened the valuation panel, not to the top of the page.
   const valuationOpener = useRef<string>(undefined);
 
-  // The workspace hands a fresh wrapper each render, so the fetch runs on mount only — the same
-  // pattern `overview-screen.tsx` uses — rather than once per re-render.
-  const latestRequest = useRef(request);
-  useEffect(() => {
-    latestRequest.current = request;
-  });
   useEffect(() => {
     let current = true;
-    latestRequest
-      .current<DashboardResponse>("/dashboard")
+    request<DashboardResponse>("/dashboard")
       .then((loaded) => {
         if (!current) return;
         setDashboard(loaded);
@@ -470,7 +463,7 @@ export function AccountsScreen({
     return () => {
       current = false;
     };
-  }, []);
+  }, [request]);
 
   function holdUntilRefresh() {
     setHeld({ accounts, institutions });
@@ -642,10 +635,14 @@ export function AccountsScreen({
   }
 
   function balanceLabel(account: AccountRow) {
-    // A snapshot-valued account with no recorded valuation has no balance to state: its stored
-    // `currentBalance` is a placeholder the net-worth sum already ignores, and printing it would
-    // turn missing evidence into a confident zero.
-    if (account.valuationMode === "snapshot" && !account.latestValuationDate) return "Not available";
+    // A snapshot-valued account's stored `currentBalance` is a placeholder the net-worth sum
+    // already ignores, and the Evidence column beside it names the valuation's own date — so
+    // printing that balance would pair a ledger figure with a valuation date. `/accounts` does
+    // not carry the snapshot's value, so this row states where the value lives instead: nothing
+    // recorded reads as unavailable, and a recorded one sends the owner to its evidence.
+    if (account.valuationMode === "snapshot") {
+      return account.latestValuationDate ? "See valuation" : "Not available";
+    }
     const currency = currencies.find((row) => row.code === account.currency);
     if (account.accountClass !== "liability" || !currency) {
       return moneyText(account.currentBalance, account.currency, currencies);
@@ -908,7 +905,7 @@ export function AccountsScreen({
           {balanceLabel(account)}
         </td>
         <td className="console-row-actions">
-          <RowActions label={`Actions for ${account.name}`} triggerContent="⋯" triggerId={triggerId}>
+          <RowActions floating label={`Actions for ${account.name}`} triggerContent="⋯" triggerId={triggerId}>
             <Button
               aria-label={`Edit ${account.name}`}
               disabled={locked}
@@ -1041,8 +1038,10 @@ export function AccountsScreen({
           : dashboard.netWorth.liabilitiesSecondary,
       }
     : undefined;
-  const assetCount = active.filter((row) => row.accountClass === "asset").length;
-  const liabilityCount = active.filter((row) => row.accountClass === "liability").length;
+  // `/dashboard` sums active, included accounts only, so the caption counts the same population.
+  const counted = active.filter((row) => row.includeInNetWorth);
+  const assetCount = counted.filter((row) => row.accountClass === "asset").length;
+  const liabilityCount = counted.filter((row) => row.accountClass === "liability").length;
   const unavailableDetail = dashboardState === "error"
     ? "The reporting total could not be loaded"
     : dashboardState === "loading"
@@ -1084,17 +1083,29 @@ export function AccountsScreen({
               : `Owed across ${liabilityCount} ${liabilityCount === 1 ? "liability account" : "liability accounts"}`,
           },
           {
+            // The opening and snapshot counts come from `/accounts` and are always exact; the
+            // coverage count needs `/dashboard`, so until that answers this tile says what it
+            // does not yet know rather than reporting an all-clear.
             label: "Evidence actions",
-            value: attention.length === 0
+            value: attention.length === 0 && dashboardState === "ready"
               ? "None"
               : `${attention.length} ${attention.length === 1 ? "account" : "accounts"}`,
-            detail: attention.length === 0
-              ? "Every open account has current evidence"
-              : [
-                  needingConfirmation > 0 ? `${needingConfirmation} opening` : null,
-                  needingSnapshot > 0 ? `${needingSnapshot} snapshot` : null,
-                  needingCoverage > 0 ? `${needingCoverage} coverage` : null,
-                ].filter(Boolean).join(" · "),
+            detail: dashboardState !== "ready"
+              ? [
+                  ...(needingConfirmation + needingSnapshot > 0
+                    ? [`${needingConfirmation} opening · ${needingSnapshot} snapshot`]
+                    : ["No opening or snapshot action"]),
+                  dashboardState === "error"
+                    ? "coverage problems could not be loaded"
+                    : "coverage problems not loaded yet",
+                ].join(" · ")
+              : attention.length === 0
+                ? "Every open account has current evidence"
+                : [
+                    needingConfirmation > 0 ? `${needingConfirmation} opening` : null,
+                    needingSnapshot > 0 ? `${needingSnapshot} snapshot` : null,
+                    needingCoverage > 0 ? `${needingCoverage} coverage` : null,
+                  ].filter(Boolean).join(" · "),
           },
         ]}
       />

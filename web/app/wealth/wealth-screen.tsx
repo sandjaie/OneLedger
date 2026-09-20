@@ -191,7 +191,7 @@ export function WealthScreen({ currency, currencies, request }: Props) {
     : null;
 
   return (
-    <section aria-labelledby="wealth-title" className="workspace-content wealth-screen">
+    <section className="workspace-content wealth-screen">
       <ConsolePageHeader
         title="Wealth"
         description="Recorded month-end net position, and the evidence behind any gap."
@@ -203,7 +203,6 @@ export function WealthScreen({ currency, currencies, request }: Props) {
           >{refreshing ? "Refreshing…" : "Refresh history"}</Button>
         }
       />
-      <h1 className="visually-hidden" id="wealth-title">Wealth</h1>
       {refreshCounts && (
         <p className="page-status" role="status">
           Refreshed {refreshCounts.monthsComputed} {refreshCounts.monthsComputed === 1 ? "month" : "months"},{" "}

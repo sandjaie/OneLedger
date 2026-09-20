@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AccountsScreen } from "@/app/accounts/accounts-screen";
-import type { apiFetch } from "@/lib/api/client";
+import { ApiError, type apiFetch } from "@/lib/api/client";
 import type { AccountRow, CurrencyRow, DashboardResponse, HouseholdCurrency, InstitutionRow } from "@/types/api";
 
 const currencies: Array<CurrencyRow> = [
@@ -511,6 +511,97 @@ describe("Accounts", () => {
     expect(screen.getByLabelText("Inventory Retirement balance Not available")).toBeTruthy();
   });
 
+  it("never pairs a snapshot account's stored ledger balance with its valuation date", () => {
+    const valued = account({
+      id: "acct-valued",
+      name: "Inventory Property",
+      accountType: "property",
+      valuationMode: "snapshot",
+      latestValuationDate: "2026-02-28",
+      currentBalance: "4000000.0000",
+      openingBalanceConfirmedAt: "2024-01-01T00:00:00Z",
+    });
+    render(<AccountsScreen {...props} accounts={[valued]} totals={[]} />);
+
+    const row = within(screen.getByRole("row", { name: /Inventory Property/ }));
+    // `/accounts` carries no snapshot value, and the evidence date belongs to the valuation —
+    // so the superseded ledger figure is never presented as the account's current value.
+    expect(row.queryByText(/40,00,000/)).toBeNull();
+    expect(row.getByText("See valuation")).toBeTruthy();
+    expect(row.getByText("28 Feb 2026")).toBeTruthy();
+    expect(row.getByText("Current")).toBeTruthy();
+  });
+
+  it("orders a role group by name and then by the stable id", () => {
+    const shared = { accountType: "savings" as const, openingBalanceConfirmedAt: "2024-01-01T00:00:00Z" };
+    render(
+      <AccountsScreen
+        {...props}
+        accounts={[
+          account({ ...shared, id: "acct-z", name: "Zephyr reserve" }),
+          account({ ...shared, id: "acct-b", name: "Same name reserve" }),
+          account({ ...shared, id: "acct-a", name: "Same name reserve" }),
+          account({ ...shared, id: "acct-m", name: "Alpha reserve" }),
+        ]}
+        totals={[]}
+      />,
+    );
+
+    // Sorted by name, then — for the two identical names — by the stable id, never by input
+    // order. The trigger ids carry the account id, so one list proves both.
+    const triggers = screen.getAllByRole("button", { name: /^Actions for/ }).map((b) => b.id);
+    expect(triggers).toEqual([
+      "account-actions-acct-m",
+      "account-actions-acct-a",
+      "account-actions-acct-b",
+      "account-actions-acct-z",
+    ]);
+  });
+
+  it("groups an unknown account type and a receivable under Other", () => {
+    render(
+      <AccountsScreen
+        {...props}
+        accounts={[
+          account({ id: "acct-recv", name: "Inventory Receivable", accountType: "receivable", openingBalanceConfirmedAt: "2024-01-01T00:00:00Z" }),
+          account({ id: "acct-new", name: "Inventory Unknown", accountType: "a_type_this_build_does_not_know", openingBalanceConfirmedAt: "2024-01-01T00:00:00Z" }),
+          account({ id: "acct-crypto", name: "Inventory Crypto", accountType: "crypto", openingBalanceConfirmedAt: "2024-01-01T00:00:00Z" }),
+        ]}
+        totals={[]}
+      />,
+    );
+
+    const table = within(screen.getByRole("region", { name: "Open accounts by role table" }));
+    const groups = table.getAllByRole("row")
+      .map((row) => row.textContent ?? "")
+      .filter((text) => / · \d+ accounts?$/.test(text));
+    expect(groups).toEqual(["Investment · 1 account", "Other · 2 accounts"]);
+  });
+
+  it("does not report an all-clear while the coverage source is unavailable", async () => {
+    const failing = vi.fn(async (path: string) => {
+      if (path === "/dashboard") throw new ApiError(503, "synthetic");
+      return undefined;
+    });
+    render(
+      <AccountsScreen
+        {...props}
+        accounts={[card]}
+        request={failing as unknown as typeof apiFetch}
+        totals={[]}
+      />,
+    );
+
+    const summary = await screen.findByRole("region", { name: "Position summary" });
+    await waitFor(() => expect(
+      within(summary).getAllByText("The reporting total could not be loaded"),
+    ).toHaveLength(2));
+    // The card's opening is acknowledged and it needs no snapshot, but a coverage problem the
+    // dashboard would have named cannot be ruled out — so the tile does not claim completeness.
+    expect(within(summary).queryByText("Every open account has current evidence")).toBeNull();
+    expect(within(summary).getByText(/coverage problems could not be loaded/)).toBeTruthy();
+  });
+
   it("teaches rather than showing a blank table when there are no accounts", () => {
     render(<AccountsScreen {...props} accounts={[]} totals={[]} />);
     expect(screen.getByRole("heading", { name: /first account/i })).toBeTruthy();
@@ -788,15 +879,21 @@ describe("Accounts", () => {
     expect(row.textContent).toContain("No shared date");
   });
 
-  it("marks an account that is excluded from group totals", () => {
+  it("marks an account that is excluded from group totals and leaves it out of the caption", async () => {
     render(
       <AccountsScreen
         {...props}
-        accounts={[account({ id: "acct-off", name: "Off books", includeInNetWorth: false })]}
+        accounts={[
+          account({ id: "acct-off", name: "Off books", includeInNetWorth: false }),
+          account({ id: "acct-on", name: "On books", openingBalanceConfirmedAt: "2024-01-01T00:00:00Z" }),
+        ]}
         totals={[]}
       />,
     );
     expect(screen.getByRole("row", { name: /Off books/ }).textContent).toContain("Excluded from totals");
+    // The reporting total sums included accounts only, so its caption counts only those.
+    const summary = await screen.findByRole("region", { name: "Position summary" });
+    expect(within(summary).getByText("Across 1 asset account")).toBeTruthy();
   });
 
   it("shows the valuation mode and a direct Add valuation entry for an unvalued snapshot account", () => {

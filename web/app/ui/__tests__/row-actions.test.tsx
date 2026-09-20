@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { RowActions } from "@/app/ui/row-actions";
@@ -29,7 +30,7 @@ describe("RowActions", () => {
 
   it("floats its panel over the row instead of expanding it, and names an icon trigger", () => {
     render(
-      <RowActions label="Actions for Synthetic record" triggerContent="⋯">
+      <RowActions floating label="Actions for Synthetic record" triggerContent="⋯">
         <button type="button">Rename record</button>
       </RowActions>,
     );
@@ -40,8 +41,30 @@ describe("RowActions", () => {
     fireEvent.click(trigger);
     // Absolute, so opening one row's actions cannot push the rows below it down.
     const panel = screen.getByRole("region", { name: "Actions for Synthetic record" });
-    expect(panel.classList.contains("row-actions-content")).toBe(true);
-    expect(panel.closest(".row-actions")).toBeTruthy();
+    expect(panel.closest(".row-actions")?.getAttribute("data-floating")).toBe("true");
+    // Anchored to the trigger rather than laid out in the row, so it cannot push rows down.
+    expect(panel.getAttribute("style")).toMatch(/top:/);
+
+    const css = readFileSync(`${process.cwd()}/app/globals.css`, "utf8");
+    // Fixed, so a `.data-table-region`'s own overflow cannot clip it; and scoped, so the
+    // subscription and recurring records keep their inline disclosure.
+    expect(css).toMatch(/\.row-actions\[data-floating="true"\] \.row-actions-content \{[^}]*position: fixed/);
+    expect(css).not.toMatch(/(?:^|\n)\.row-actions-content \{[^}]*position: absolute/);
+  });
+
+  it("closes a floating panel when the page scrolls away from its trigger", () => {
+    render(
+      <RowActions floating label="Actions for Synthetic record" triggerContent="⋯">
+        <button type="button">Rename record</button>
+      </RowActions>,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Actions for Synthetic record" });
+    fireEvent.click(trigger);
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.scroll(document, {});
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
   });
 
   it("closes on a click outside without stealing focus from where the owner clicked", () => {

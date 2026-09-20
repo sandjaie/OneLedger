@@ -1584,7 +1584,7 @@ body { background: var(--paper); }
 .salary-action-nav { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
 .salary-action-nav a { display: inline-flex; align-items: center; min-height: 36px; padding: 0.45rem 0.75rem; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--card); color: var(--ink); font-size: 0.73rem; font-weight: 650; text-decoration: none; }
 .salary-action-nav a:hover, .salary-action-nav a:focus-visible { border-color: var(--accent); color: var(--accent); }
-.salary-screen .overview-scroll, .wealth-screen .wealth-table-wrap { max-height: min(68vh, 600px); overflow: auto; }
+.salary-screen .overview-scroll { max-height: min(68vh, 600px); overflow: auto; }
 .salary-screen .overview-scroll table { min-width: max-content; }
 .wealth-screen .wealth-table { width: 100%; min-width: 520px; border-collapse: collapse; font-size: 0.78rem; }
 .wealth-screen .wealth-table :is(th, td) { padding: 0.65rem 0.75rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
@@ -1599,7 +1599,7 @@ body { background: var(--paper); }
 @media (max-width: 588px) {
   .coverage-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .coverage-summary > div:first-child { grid-column: 1 / -1; }
-  .coverage-screen .coverage-table-wrap, .salary-screen .overview-scroll, .wealth-screen .wealth-table-wrap { max-height: 460px; }
+  .coverage-screen .coverage-table-wrap, .salary-screen .overview-scroll { max-height: 460px; }
 }
 .spending-screen > h2 { margin: 1.8rem 0 0.4rem; }
 .spending-screen > .lede { max-width: 72ch; margin: 0.2rem 0 0.8rem; color: var(--muted); font-size: 0.77rem; line-height: 1.5; }
@@ -2197,7 +2197,7 @@ body { background: var(--paper); }
 
 .coverage-legend { gap: 8px; }
 .coverage-legend li { padding: 5px 9px; border: 1px solid var(--rule); border-radius: 99px; background: var(--surface); }
-.coverage-table-wrap, .documents-table-wrap, .wealth-table-wrap {
+.coverage-table-wrap, .documents-table-wrap {
   max-width: 100%; overflow-x: auto; border: 1px solid var(--rule);
   border-radius: 9px; background: var(--surface);
 }
@@ -3147,13 +3147,13 @@ body {
 }
 .console-table .console-row-actions { width: 1%; text-align: right; }
 
-.row-actions { position: relative; display: inline-flex; }
-.row-actions-trigger { line-height: 1; }
-.row-actions-content {
-  position: absolute;
+/* Scoped to the floating variant: the subscription and recurring records keep the inline
+   disclosure they were built with until their own Phase 4.8 task redesigns them. */
+.row-actions[data-floating="true"] { display: inline-flex; }
+.row-actions[data-floating="true"] .row-actions-trigger { line-height: 1; }
+.row-actions[data-floating="true"] .row-actions-content {
+  position: fixed;
   z-index: 40;
-  top: calc(100% + 6px);
-  right: 0;
   display: grid;
   justify-items: start;
   gap: 2px;
@@ -3164,9 +3164,17 @@ body {
   background: #fff;
   box-shadow: 0 16px 40px rgb(20 32 50 / 16%);
   text-align: left;
+  transform: translateX(-100%);
 }
-.row-actions-content[hidden] { display: none; }
-.row-actions-content > [data-slot="button"] { width: 100%; justify-content: flex-start; }
+.row-actions[data-floating="true"] .row-actions-content[data-flip="true"] { transform: translate(-100%, -100%); }
+.row-actions[data-floating="true"] .row-actions-content[hidden] { display: none; }
+.row-actions[data-floating="true"] .row-actions-content > [data-slot="button"] { width: 100%; justify-content: flex-start; }
+
+.valuation-facts { display: flex; flex-wrap: wrap; gap: 0; margin: 0; }
+.valuation-facts > div { min-width: 0; padding: 0 18px; border-left: 1px solid var(--console-line); }
+.valuation-facts > div:first-child { padding-left: 0; border-left: 0; }
+.valuation-facts dt { color: var(--console-muted); font-size: 11px; }
+.valuation-facts dd { margin: 4px 0 0; font-size: 13px; }
 
 .account-identifier-list { margin-top: 4px; }
 .console-entity .account-identifier { gap: 0; }
