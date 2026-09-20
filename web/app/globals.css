@@ -3854,6 +3854,8 @@ body {
 .salary-work-panel .salary-import-preview > li,
 .salary-work-panel .salary-import-result > li,
 .salary-work-panel .salary-deduction-rules > li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--console-line); }
+.salary-work-panel .salary-deduction-rules > li > span { min-width: 0; overflow-wrap: anywhere; }
+.salary-work-panel .salary-deduction-rules [data-slot="native-select"] { min-width: 0; max-width: 100%; }
 .salary-deduction-panel { grid-template-columns: minmax(0, 1fr); }
 .salary-deduction-panel .salary-deduction-rule-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) auto; gap: 10px; align-items: end; }
 
@@ -3870,5 +3872,7 @@ body {
   .salary-unmatched-credits .console-list > li { grid-template-columns: minmax(0, 1fr); }
   .salary-screen > .salary-work-panel { grid-template-columns: minmax(0, 1fr); padding: 16px; }
   .salary-work-panel fieldset > div { grid-template-columns: minmax(0, 1fr); }
+  .salary-work-panel .salary-deduction-rules > li { align-items: stretch; flex-direction: column; }
+  .salary-work-panel .salary-deduction-rules > li > [data-slot="button"] { align-self: flex-start; }
   .salary-work-panel .salary-deduction-rule-form { grid-template-columns: minmax(0, 1fr); }
 }

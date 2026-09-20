@@ -446,7 +446,7 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
         currencies={currencies}
         refreshKey={attempt}
         request={request}
-        unclassifiedDeductionCount={unclassifiedDeductionCount}
+        unclassifiedDeductionCount={loadState === "ready" ? unclassifiedDeductionCount : null}
       />
 
       <section className="salary-payslips" aria-labelledby="salary-list-title">

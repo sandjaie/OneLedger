@@ -112,6 +112,20 @@ describe("salary screen", () => {
     expect(screen.getByRole("textbox", { name: "Line 1 amount" })).toBeTruthy();
   });
 
+  it("does not report reconciliation while deduction evidence is unavailable", async () => {
+    const request = requestFrom((path) => {
+      if (path === "/salary/analysis") return { currencies: [], salaryCreditsWithoutPayslip: [] };
+      if (path === "/payslips/deduction-rules") return { rules: [] };
+      if (path === "/payslips") throw new ApiError(500, "unavailable");
+      throw new ApiError(500, "unexpected");
+    });
+    render(<PayslipsScreen categories={categories} currencies={currencies} request={request} />);
+
+    await screen.findByText("Payslips could not be loaded.");
+    expect(await screen.findByRole("region", { name: "Salary evidence status is incomplete" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Salary evidence is reconciled" })).toBeNull();
+  });
+
   it("posts typed strings with one idempotency key, reused on a retry", async () => {
     let firstKey: string | undefined;
     let calls = 0;

@@ -28,7 +28,8 @@ type Props = {
    * this analysis reloads with them — the same "attempt" convention that reloads the payslip
    * list itself. */
   refreshKey: number;
-  unclassifiedDeductionCount?: number;
+  /** Null or omitted means the payslip evidence needed to determine this count is unavailable. */
+  unclassifiedDeductionCount?: number | null;
 };
 
 type LoadState = "loading" | "ready" | "error";
@@ -53,7 +54,25 @@ function monthRows(currency: SalaryCurrencyOut): Array<MonthRow> {
   return rows.sort((a, b) => (a.payMonth < b.payMonth ? 1 : a.payMonth > b.payMonth ? -1 : 0));
 }
 
-export function SalaryAnalysis({ currencies, request, refreshKey, unclassifiedDeductionCount = 0 }: Props) {
+function latestTrendPoint(currency: SalaryCurrencyOut) {
+  return currency.trend
+    .filter((point) => point.earnedNetPay !== null)
+    .reduce<(typeof currency.trend)[number] | undefined>(
+      (latest, point) => !latest || point.payMonth > latest.payMonth ? point : latest,
+      undefined,
+    );
+}
+
+function latestCurrency(currencies: Array<SalaryCurrencyOut>) {
+  return currencies.reduce<SalaryCurrencyOut | undefined>((latest, currency) => {
+    const month = latestTrendPoint(currency)?.payMonth;
+    const latestMonth = latest ? latestTrendPoint(latest)?.payMonth : undefined;
+    if (!month) return latest;
+    return !latestMonth || month > latestMonth ? currency : latest;
+  }, undefined);
+}
+
+export function SalaryAnalysis({ currencies, request, refreshKey, unclassifiedDeductionCount }: Props) {
   const [data, setData] = useState<SalaryAnalysisResponse>();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [retryAttempt, setRetryAttempt] = useState(0);
@@ -68,7 +87,9 @@ export function SalaryAnalysis({ currencies, request, refreshKey, unclassifiedDe
         if (!current) return;
         setData(result);
         setSelectedCurrency((prior) =>
-          result.currencies.some((row) => row.currency === prior) ? prior : result.currencies[0]?.currency,
+          result.currencies.some((row) => row.currency === prior)
+            ? prior
+            : latestCurrency(result.currencies)?.currency ?? result.currencies[0]?.currency,
         );
         setLoadState("ready");
       })
@@ -114,16 +135,23 @@ export function SalaryAnalysis({ currencies, request, refreshKey, unclassifiedDe
   const current: SalaryCurrencyOut | undefined =
     data?.currencies.find((row) => row.currency === selectedCurrency) ?? data?.currencies[0];
   const rows = current ? monthRows(current) : [];
-  const latestPayslip = rows.find((row) => row.payslip)?.payslip;
+  const latestPeriod = current ? latestTrendPoint(current) : undefined;
   const unmatchedCreditCount = data?.salaryCreditsWithoutPayslip.length ?? 0;
-  const attentionCount = unmatchedCreditCount + unclassifiedDeductionCount;
+  const deductionEvidenceKnown = unclassifiedDeductionCount !== null
+    && unclassifiedDeductionCount !== undefined;
+  const hasAttention = unmatchedCreditCount > 0
+    || (deductionEvidenceKnown && unclassifiedDeductionCount > 0);
   const attentionRow = (
     <AttentionRow
-      tone={attentionCount > 0 ? "attention" : "success"}
-      title={attentionCount > 0 ? "Salary evidence needs attention" : "Salary evidence is reconciled"}
-      detail={attentionCount > 0
-        ? `${unmatchedCreditCount} unmatched salary ${unmatchedCreditCount === 1 ? "credit" : "credits"} · ${unclassifiedDeductionCount} unclassified ${unclassifiedDeductionCount === 1 ? "deduction" : "deductions"}`
-        : "No unmatched salary credits or unclassified deductions are visible."}
+      tone={hasAttention ? "attention" : deductionEvidenceKnown ? "success" : "neutral"}
+      title={hasAttention
+        ? "Salary evidence needs attention"
+        : deductionEvidenceKnown ? "Salary evidence is reconciled" : "Salary evidence status is incomplete"}
+      detail={hasAttention
+        ? `${unmatchedCreditCount} unmatched salary ${unmatchedCreditCount === 1 ? "credit" : "credits"} · ${deductionEvidenceKnown ? `${unclassifiedDeductionCount} unclassified ${unclassifiedDeductionCount === 1 ? "deduction" : "deductions"}` : "deduction evidence unavailable"}`
+        : deductionEvidenceKnown
+          ? "No unmatched salary credits or unclassified deductions are visible."
+          : "Deduction evidence is not available yet."}
       action={unmatchedCreditCount > 0 ? <a href="#salary-credits-without-payslip-title">Review credits</a> : undefined}
     />
   );
@@ -171,16 +199,14 @@ export function SalaryAnalysis({ currencies, request, refreshKey, unclassifiedDe
                 </div>
               )}
 
-              {latestPayslip && (
+              {latestPeriod && (
                 <>
                   <div className="salary-lead">
                     <div>
                       <p className="section-label">Latest evidenced pay period</p>
-                      <h2>{monthLabel(latestPayslip.payMonth)}</h2>
-                      <StatusLabel tone={latestPayslip.receiptStatus === "received" ? "success" : "attention"}>
-                        Receipt {latestPayslip.receiptStatus === "unlinked"
-                          ? "not linked"
-                          : (RECEIPT_TEXT[latestPayslip.receiptStatus] ?? latestPayslip.receiptStatus).toLowerCase()}
+                      <h2>{monthLabel(latestPeriod.payMonth)}</h2>
+                      <StatusLabel tone={latestPeriod.cashReceived !== null ? "success" : "attention"}>
+                        {latestPeriod.cashReceived !== null ? "Receipt received" : "Receipt unavailable"}
                       </StatusLabel>
                     </div>
                     <p>
@@ -189,12 +215,12 @@ export function SalaryAnalysis({ currencies, request, refreshKey, unclassifiedDe
                     </p>
                   </div>
                   <MetricStrip
-                    label={`Latest salary evidence for ${monthLabel(latestPayslip.payMonth)}`}
+                    label={`Latest salary evidence for ${monthLabel(latestPeriod.payMonth)}`}
                     items={[
-                      { label: "Earned net pay", value: moneyText(latestPayslip.netPay, current.currency, currencies), detail: current.currency },
-                      { label: "Cash received", value: latestPayslip.cashReceived === null ? "Not available" : moneyText(latestPayslip.cashReceived, current.currency, currencies), detail: "Eligible linked deposit" },
-                      { label: "Deductions", value: moneyText(latestPayslip.deductions, current.currency, currencies), detail: "Payslip evidence" },
-                      { label: "Compensation", value: moneyText(latestPayslip.compensation, current.currency, currencies), detail: "Before deductions" },
+                      { label: "Pay period", value: monthLabel(latestPeriod.payMonth), detail: "Latest server evidence" },
+                      { label: "Currency", value: current.currency, detail: "Payslip currency" },
+                      { label: "Earned net pay", value: latestPeriod.earnedNetPay === null ? "Not available" : moneyText(latestPeriod.earnedNetPay, current.currency, currencies), detail: "All payslips in period" },
+                      { label: "Cash received", value: latestPeriod.cashReceived === null ? "Not available" : moneyText(latestPeriod.cashReceived, current.currency, currencies), detail: "Eligible linked receipts" },
                     ]}
                   />
                 </>
