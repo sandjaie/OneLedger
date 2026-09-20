@@ -77,6 +77,8 @@ describe("EvidenceChart", () => {
 
     // The module owns the heading; the chart's accessible equivalent is collapsed, never dropped.
     expect(screen.queryByRole("heading", { name: "Confirmed trend" })).toBeNull();
+    // The head is the module's; the chart's own summary stays readable to assistive technology.
+    expect(screen.getByText("Synthetic series").className).toBe("visually-hidden");
     const disclosure = screen.getByText("Exact values");
     fireEvent.click(disclosure);
     const table = screen.getByRole("table", { name: "Confirmed trend exact values" });

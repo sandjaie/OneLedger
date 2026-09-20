@@ -75,9 +75,10 @@ export function EvidenceChart({ title, description, periods, series, dense = fal
   description: string;
   periods: string[];
   series: EvidenceSeries[];
-  /** Inside a console module: the head is the module's own, and the exact values — which stay
-   * the chart's accessible equivalent — collapse behind a disclosure instead of doubling the
-   * module's height. Nothing is dropped; a dense chart is still readable without the plot. */
+  /** Inside a console module: the visible head is the module's own, and the exact values —
+   * which stay the chart's accessible equivalent — collapse behind a disclosure instead of
+   * doubling the module's height. Nothing is dropped: the description stays in the accessible
+   * tree and a dense chart is still readable without the plot. */
   dense?: boolean;
 }) {
   const rows = chartRows(periods, series);
@@ -86,7 +87,9 @@ export function EvidenceChart({ title, description, periods, series, dense = fal
 
   return (
     <section className="evidence-chart" aria-label={title} data-dense={dense ? "true" : undefined}>
-      {!dense && (
+      {dense ? (
+        <p className="visually-hidden">{description}</p>
+      ) : (
         <div className="evidence-chart-head">
           <h3>{title}</h3>
           <p>{description}</p>

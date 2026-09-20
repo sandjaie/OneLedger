@@ -265,6 +265,12 @@ describe("overview screen", () => {
     }
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(screen.queryByText(/Your money/)).toBeNull();
+    // The exact links the Overview contract names.
+    expect(screen.getByRole("link", { name: "View accounts" })).toHaveProperty("pathname", "/accounts");
+    expect(screen.getByRole("link", { name: "Explore history" })).toHaveProperty("pathname", "/wealth");
+    expect(screen.getByRole("link", { name: "View all transactions" })).toHaveProperty("pathname", "/transactions");
+    expect(screen.getByRole("link", { name: "Review commitments" })).toHaveProperty("pathname", "/plans");
+    expect(screen.getByRole("link", { name: "Coverage" })).toHaveProperty("pathname", "/coverage");
   });
 
   it("renders the position composition from the server's own shares and keeps a liability signed", async () => {
@@ -294,14 +300,18 @@ describe("overview screen", () => {
         sharePercentSecondary: null,
         chartCoordinateSecondary: null,
       })),
-      missing: [{ accountId: "account-1", currency: "XAE" }],
+      // One account, both legs: the server lists it once per reporting currency.
+      missing: [
+        { accountId: "account-1", currency: "XAE" },
+        { accountId: "account-1", currency: "XIN" },
+      ],
     });
     renderWith(payload({ positionComposition: withheld }), household.currencies[1]);
 
     const panel = await screen.findByRole("region", { name: "Position composition" });
     expect(within(panel).getAllByText("Not available")).toHaveLength(2);
     expect(within(panel).getAllByText("Share unavailable")).toHaveLength(2);
-    expect(within(panel).getByText(/cannot be stated in XAE/)).toBeTruthy();
+    expect(within(panel).getByText(/cannot be stated in XAE: 1 included account has/)).toBeTruthy();
     expect(panel.querySelector(".position-bar")).toBeNull();
   });
 

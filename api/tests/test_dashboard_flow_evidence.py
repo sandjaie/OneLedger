@@ -214,6 +214,26 @@ def test_holdings_of_one_account_add_into_its_bucket_once_each() -> None:
     ]
 
 
+def test_an_account_missing_in_both_currencies_is_named_once_for_each() -> None:
+    """One entry per account per reporting currency, in a stable order: a client counting the
+    accounts it cannot state must filter by the currency it is showing."""
+    composition = position_composition(
+        [
+            _fact(1, "asset", "savings", "75.0000", "18.7500"),
+            _fact(2, "asset", "property", None, None),
+        ],
+        XIN,
+        XAE,
+    )
+
+    assert [row.valueBase for row in composition.rows] == [None, None]
+    assert [row.valueSecondary for row in composition.rows] == [None, None]
+    assert [(item.accountId, item.currency) for item in composition.missing] == [
+        (_id(2), XAE),
+        (_id(2), XIN),
+    ]
+
+
 def test_a_missing_value_nulls_its_own_reporting_currency_whole_and_names_the_account() -> None:
     """The other reporting currency stands on its own (I7's rule, applied to the composition):
     a smaller, confident, wrong share is worse than an absent one."""

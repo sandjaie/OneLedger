@@ -436,6 +436,11 @@ export function OverviewScreen({ household, currency, currencies, request, logou
   function compositionModule(dashboard: DashboardResponse, base: boolean, shown: string) {
     const { rows, missing } = dashboard.positionComposition;
     const stated = rows.filter((row) => bucket(row, base).value !== null);
+    // One `missing` entry per account per reporting currency: count the distinct accounts the
+    // shown currency actually lacks, never both legs of the same account.
+    const withheld = new Set(
+      missing.filter((item) => item.currency === shown).map((item) => item.accountId),
+    ).size;
     return (
       <Module
         title="Position composition"
@@ -453,8 +458,8 @@ export function OverviewScreen({ household, currency, currencies, request, logou
           <>
             {stated.length === 0 && (
               <p className="inline-alert">
-                The composition cannot be stated in {shown}: {missing.length}{" "}
-                {missing.length === 1 ? "included account has" : "included accounts have"} no value
+                The composition cannot be stated in {shown}: {withheld}{" "}
+                {withheld === 1 ? "included account has" : "included accounts have"} no value
                 in that reporting currency. Shares are withheld rather than recalculated without them.
               </p>
             )}
