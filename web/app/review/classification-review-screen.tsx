@@ -3,9 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 
+import { ConsolePageHeader } from "@/app/ui/console-page-header";
+import { DataToolbar } from "@/app/ui/data-toolbar";
+import { MetricStrip } from "@/app/ui/metric-strip";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { type apiFetch, errorText } from "@/lib/api/client";
@@ -35,6 +38,45 @@ type Sort = "default" | "impact";
 function groupsPath(offset: number, sort: Sort) {
   const base = `/classification-review/groups?limit=${PAGE_SIZE}&offset=${offset}`;
   return sort === "impact" ? `${base}&sort=impact` : base;
+}
+
+function featuredGroup(groups: Array<ClassificationReviewGroup>) {
+  const proposed = groups.filter(
+    (group) => group.knowledgeVersionId !== null && !group.transactionIdsTruncated,
+  );
+  const actionable = proposed.length > 0
+    ? proposed
+    : groups.filter((group) => group.rememberable && !group.transactionIdsTruncated);
+  return actionable.reduce<ClassificationReviewGroup | undefined>((best, candidate) => {
+    if (!best) return candidate;
+    // The API emits a normalized fixed-precision decimal string, so lexical comparison keeps
+    // confidence exact without turning it into a client-side floating-point value.
+    return candidate.proposedConfidence.localeCompare(best.proposedConfidence) > 0
+      ? candidate
+      : best;
+  }, undefined);
+}
+
+async function strongestQueueGroup(
+  request: typeof apiFetch,
+  initial: ClassificationReviewResponse,
+  sort: Sort,
+) {
+  let best = featuredGroup(initial.groups);
+  let offset = initial.groups.length;
+  // Confidence is bounded at 1.000 by the API. Once that exact maximum is present there is no
+  // need to read farther; otherwise exhaust the authenticated queue so "strongest" is global,
+  // not an accidental property of the current 50-row page.
+  while (best?.proposedConfidence !== "1.000" && offset < initial.totalGroups) {
+    const next = await request<ClassificationReviewResponse>(groupsPath(offset, sort));
+    const candidate = featuredGroup(next.groups);
+    if (candidate && (!best || candidate.proposedConfidence.localeCompare(best.proposedConfidence) > 0)) {
+      best = candidate;
+    }
+    if (next.groups.length === 0) break;
+    offset += next.groups.length;
+  }
+  return best;
 }
 
 const REASON_LABELS: Record<ClassificationReviewGroup["reason"], string> = {
@@ -496,11 +538,31 @@ export function ClassificationReviewScreen({ categories, request }: Props) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [moreProblem, setMoreProblem] = useState<string>();
   const [sort, setSort] = useState<Sort>("default");
+  const [featured, setFeatured] = useState<ClassificationReviewGroup>();
+  const [featuredProblem, setFeaturedProblem] = useState(false);
 
   useEffect(() => {
     let current = true;
     request<ClassificationReviewResponse>(groupsPath(0, sort))
-      .then((result) => { if (current) setPage(result); })
+      .then((result) => {
+        if (!current) return;
+        setPage(result);
+        const initialFeatured = featuredGroup(result.groups);
+        if (
+          initialFeatured?.proposedConfidence === "1.000"
+          || result.groups.length >= result.totalGroups
+        ) {
+          setFeatured(initialFeatured);
+          return;
+        }
+        void strongestQueueGroup(request, result, sort)
+          .then((strongest) => {
+            if (current) setFeatured(strongest);
+          })
+          .catch(() => {
+            if (current) setFeaturedProblem(true);
+          });
+      })
       .catch(() => { if (current) setProblem("The review queue could not be loaded."); })
       .finally(() => { if (current) setLoading(false); });
     return () => { current = false; };
@@ -509,6 +571,8 @@ export function ClassificationReviewScreen({ categories, request }: Props) {
   function retry() {
     setLoading(true);
     setProblem(undefined);
+    setFeatured(undefined);
+    setFeaturedProblem(false);
     setAttempt((value) => value + 1);
   }
 
@@ -516,6 +580,8 @@ export function ClassificationReviewScreen({ categories, request }: Props) {
     setLoading(true);
     setProblem(undefined);
     setPage(undefined);
+    setFeatured(undefined);
+    setFeaturedProblem(false);
     setSort(next);
   }
 
@@ -543,34 +609,42 @@ export function ClassificationReviewScreen({ categories, request }: Props) {
   }
 
   const remaining = page ? Math.max(0, page.totalGroups - page.groups.length) : 0;
+  const orderedGroups = page && featured
+    ? [featured, ...page.groups.filter((group) => group.groupKey !== featured.groupKey)]
+    : page?.groups ?? [];
 
   return (
-    <section className="classification-review" aria-labelledby="classification-review-title">
-      <header className="classification-review-head">
-        <div>
-          <p className="classification-kicker">Household knowledge</p>
-          <h1 id="classification-review-title">Classify</h1>
-          <p>Review the next household question, preview its exact scope, then apply only when it is right.</p>
-        </div>
-        {page && (
-          <div className="classification-summary" aria-label="Review queue summary">
-            <strong>{page.totalGroups}</strong>
-            <span>{page.totalGroups === 1 ? "group" : "groups"} · {page.totalOccurrences} occurrences</span>
-          </div>
-        )}
-      </header>
+    <section aria-label="Classify" className="workspace-content classification-review">
+      <div id="classification-review-title">
+        <ConsolePageHeader
+          title="Classify"
+          description="Review the strongest actionable proposal, preview its exact scope, then apply only when it is right."
+          actions={<Link className={buttonVariants({ variant: "outline" })} href="/settings#merchant-knowledge-title">Merchant knowledge</Link>}
+        />
+      </div>
 
-      <label className="classification-sort">
-        Sort
-        <NativeSelect
-          disabled={loading}
-          onChange={(event) => changeSort(event.target.value as Sort)}
-          value={sort}
-        >
-          <NativeSelectOption value="default">Most urgent first</NativeSelectOption>
-          <NativeSelectOption value="impact">Largest amount first</NativeSelectOption>
-        </NativeSelect>
-      </label>
+      {page && <MetricStrip
+        label="Review queue summary"
+        items={[
+          { label: "Review groups", value: String(page.totalGroups), detail: "Authenticated queue total" },
+          { label: "Affected rows", value: String(page.totalOccurrences), detail: "Occurrences across the queue" },
+          { label: "Loaded groups", value: String(orderedGroups.length), detail: "Available in this view" },
+        ]}
+      />}
+
+      <DataToolbar label="Classification queue controls" summary={page ? `${orderedGroups.length} loaded` : undefined}>
+        <label className="classification-sort">
+          Sort
+          <NativeSelect
+            disabled={loading}
+            onChange={(event) => changeSort(event.target.value as Sort)}
+            value={sort}
+          >
+            <NativeSelectOption value="default">Most urgent first</NativeSelectOption>
+            <NativeSelectOption value="impact">Largest amount first</NativeSelectOption>
+          </NativeSelect>
+        </label>
+      </DataToolbar>
 
       {loading && <p className="classification-state">Loading review queue…</p>}
       {!loading && problem && (
@@ -582,14 +656,17 @@ export function ClassificationReviewScreen({ categories, request }: Props) {
       {!loading && !problem && page?.candidateLimitReached && (
         <Alert variant="destructive"><AlertDescription>The candidate scan limit was reached. Use a narrower date range before treating this queue as complete.</AlertDescription></Alert>
       )}
+      {!loading && !problem && featuredProblem && (
+        <Alert variant="destructive"><AlertDescription>The strongest actionable proposal could not be confirmed across the full queue. The queue remains available, but no group is promoted.</AlertDescription></Alert>
+      )}
       {!loading && !problem && page?.groups.length === 0 && (
         <p className="classification-empty">Nothing needs classification review.</p>
       )}
       {!loading && !problem && page && page.groups.length > 0 && (
         <>
           <div className="classification-list">
-            {page.groups.map((group, index) => (
-              <GroupCard categories={categories} featured={index === 0} group={group} key={group.groupKey} request={request} />
+            {orderedGroups.map((group) => (
+              <GroupCard categories={categories} featured={group.groupKey === featured?.groupKey} group={group} key={group.groupKey} request={request} />
             ))}
           </div>
           {moreProblem && <Alert variant="destructive"><AlertDescription>{moreProblem}</AlertDescription></Alert>}

@@ -3,6 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
+import { AttentionRow } from "@/app/ui/attention-row";
+import { ConsolePageHeader } from "@/app/ui/console-page-header";
+import { DataTableRegion } from "@/app/ui/data-table-region";
+import { MetricStrip } from "@/app/ui/metric-strip";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -77,12 +81,21 @@ export function CoverageScreen({ request }: Props) {
   const [problem, setProblem] = useState<string>();
   const [feedback, setFeedback] = useState<string>();
   const selectedRef = useRef<HTMLElement>(null);
+  const selectionOpenerRef = useRef<HTMLElement | null>(null);
+  const gridFallbackRef = useRef<HTMLDivElement>(null);
+  const restoreAfterRefreshRef = useRef(false);
   const summary = coverage ? reviewSummary(coverage) : undefined;
   const firstGap = summary?.firstGap;
 
   useEffect(() => {
     if (selected) selectedRef.current?.focus();
   }, [selected]);
+
+  useEffect(() => {
+    if (!restoreAfterRefreshRef.current) return;
+    restoreAfterRefreshRef.current = false;
+    restoreSelectionFocus();
+  }, [coverage]);
 
   useEffect(() => {
     let current = true;
@@ -104,6 +117,9 @@ export function CoverageScreen({ request }: Props) {
     if (cell.status === "outside_account_life" || cell.status === "reconciled" || cell.status === "in_progress") {
       return;
     }
+    selectionOpenerRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
     setSelected({ row, month, cell });
     setReason(cell.reason ?? "not_issued");
     setNote(cell.note ?? "");
@@ -111,9 +127,20 @@ export function CoverageScreen({ request }: Props) {
     setFeedback(undefined);
   }
 
+  function restoreSelectionFocus() {
+    requestAnimationFrame(() => {
+      const opener = selectionOpenerRef.current;
+      const target = opener && opener !== document.body && opener.isConnected
+        ? opener
+        : gridFallbackRef.current;
+      target?.focus();
+    });
+  }
+
   function closeDialog() {
     setSelected(undefined);
     setProblem(undefined);
+    restoreSelectionFocus();
   }
 
   async function acknowledge() {
@@ -135,6 +162,8 @@ export function CoverageScreen({ request }: Props) {
       });
       setFeedback("Gap acknowledged.");
       setSelected(undefined);
+      restoreAfterRefreshRef.current = true;
+      restoreSelectionFocus();
       setAttempt((value) => value + 1);
     } catch (error) {
       setProblem(errorText(error, "This gap could not be acknowledged."));
@@ -153,6 +182,8 @@ export function CoverageScreen({ request }: Props) {
       await request(`/coverage/acknowledgements?${params.toString()}`, { method: "DELETE" });
       setFeedback("Acknowledgement removed.");
       setSelected(undefined);
+      restoreAfterRefreshRef.current = true;
+      restoreSelectionFocus();
       setAttempt((value) => value + 1);
     } catch (error) {
       setProblem(errorText(error, "This acknowledgement could not be removed."));
@@ -162,17 +193,19 @@ export function CoverageScreen({ request }: Props) {
   }
 
   return (
-    <section className="workspace-content coverage-screen" aria-labelledby="coverage-title">
-      <header className="page-head">
-        <p className="eyebrow">Evidence coverage</p>
-        <h1 className="workspace-title" id="coverage-title">Coverage</h1>
-        <p>See what is evidenced, what has been acknowledged, and which gaps need a decision.</p>
+    <section aria-label="Coverage" className="workspace-content coverage-screen">
+      <div id="coverage-title">
+        <ConsolePageHeader
+          title="Coverage"
+          description="Month-by-month evidence, acknowledged gaps and the next decision that needs attention."
+          actions={<Link className={buttonVariants({ variant: "outline" })} href="/import">Import evidence</Link>}
+        />
         {coverage && (
           <details className="experience-disclosure"><summary>Coverage scope and anchor</summary>
             <p>History anchor <strong>{coverage.historyAnchor}</strong> (fixed; ADR-0011). Every statement-sourced account and payslips are shown month by month from the anchor.</p>
           </details>
         )}
-      </header>
+      </div>
 
       {state === "loading" && <p className="loading-frame" role="status">Loading the coverage grid…</p>}
       {state === "error" && (
@@ -188,15 +221,24 @@ export function CoverageScreen({ request }: Props) {
 
       {state === "ready" && coverage && (
         <>
-          {summary && <section aria-label="Coverage status" className="coverage-summary">
-            <div><span>Needs review</span><strong>{summary.needsReview}</strong><small>Missing or partial month cells</small></div>
-            <div><span>Acknowledged</span><strong>{summary.acknowledged}</strong><small>Gaps explained by the owner</small></div>
-            <div><span>Reconciled</span><strong>{summary.reconciled}</strong><small>Months with recorded evidence</small></div>
-            {firstGap ? <>
-              <Button onClick={() => selectCell(firstGap.row, firstGap.month, firstGap.cell)} type="button">Review earliest gap</Button>
-              <p>{rowLabel(firstGap.row)} · {firstGap.month}</p>
-            </> : <p role="status">No missing or partial month needs review.</p>}
-          </section>}
+          {summary && <MetricStrip
+            label="Coverage status"
+            items={[
+              { label: "Needs review", value: String(summary.needsReview), detail: "Missing or partial month cells" },
+              { label: "Acknowledged", value: String(summary.acknowledged), detail: "Gaps explained by the owner" },
+              { label: "Reconciled", value: String(summary.reconciled), detail: "Months with recorded evidence" },
+            ]}
+          />}
+          {firstGap ? (
+            <AttentionRow
+              action={<Button onClick={() => selectCell(firstGap.row, firstGap.month, firstGap.cell)} type="button">Review earliest gap</Button>}
+              detail={`${rowLabel(firstGap.row)} · ${firstGap.month}`}
+              title={`${summary?.needsReview ?? 0} month ${summary?.needsReview === 1 ? "cell needs" : "cells need"} review`}
+              tone="attention"
+            />
+          ) : (
+            <AttentionRow title="No missing or partial month needs review." tone="success" />
+          )}
           <ul className="coverage-legend" aria-label="Status legend">
             {(Object.keys(STATUS_LABEL) as Array<MonthCell["status"]>).map((status) => (
               <li key={status}><Badge variant={status === "missing" || status === "partial" ? "destructive" : "outline"}>{STATUS_LABEL[status]}</Badge></li>
@@ -205,8 +247,9 @@ export function CoverageScreen({ request }: Props) {
 
           {feedback && <p role="status">{feedback}</p>}
 
-          <div className="coverage-table-wrap">
-            <table className="coverage-table">
+          <div aria-label="Coverage grid" className="coverage-grid-anchor" ref={gridFallbackRef} role="group" tabIndex={-1}>
+          <DataTableRegion label="Coverage by account and month">
+            <table className="coverage-table console-table">
               <caption>History coverage, one row per account and payslips</caption>
               <thead>
                 <tr>
@@ -245,6 +288,7 @@ export function CoverageScreen({ request }: Props) {
                 ))}
               </tbody>
             </table>
+          </DataTableRegion>
           </div>
 
           {selected && (

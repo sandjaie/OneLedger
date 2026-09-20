@@ -4018,3 +4018,139 @@ body {
   .plans-screen :is(.needs-attention-controls, .needs-attention-inline-form, .plans-reserve-form) { align-items: stretch; flex-direction: column; }
   .plans-screen :is(.needs-attention-controls, .needs-attention-inline-form, .plans-reserve-form) > * { max-width: 100%; }
 }
+
+/* Phase 4.8 Task 10 — Coverage, Documents and Classify share one compact evidence grammar.
+   Exact evidence stays primary; wide grids and tables own labelled local overflow. */
+.workspace-content.coverage-screen,
+.workspace-content.documents-screen,
+.workspace-content.classification-review {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+}
+:is(.coverage-screen, .documents-screen, .classification-review) > * { min-width: 0; }
+:is(.coverage-screen, .documents-screen, .classification-review) .console-page-header { margin-bottom: 0; }
+:is(.coverage-screen, .classification-review) .metric-strip { padding-block: 14px; }
+
+.coverage-screen .experience-disclosure { margin-top: 14px; }
+.coverage-screen .coverage-legend { gap: 6px; margin: 0; }
+.coverage-screen .coverage-legend li { padding: 4px 8px; border-color: var(--console-line); background: transparent; }
+.coverage-grid-anchor { min-width: 0; outline: none; }
+.coverage-grid-anchor:focus-visible { outline: 2px solid var(--console-blue); outline-offset: 2px; }
+.coverage-screen .coverage-grid-anchor > .data-table-region { max-height: min(68vh, 680px); border-block: 1px solid var(--console-line); }
+.coverage-screen .coverage-table { min-width: max-content; }
+.coverage-screen .coverage-table :is(th, td) { border: 0; border-bottom: 1px solid var(--console-line); }
+.coverage-screen .coverage-table :is(thead th, tbody th) { position: sticky; z-index: 1; background: #fff; }
+.coverage-screen .coverage-table thead th { top: 0; z-index: 2; }
+.coverage-screen .coverage-table tbody th { left: 0; min-width: 170px; }
+.coverage-screen .coverage-cell { min-height: 30px; }
+.coverage-screen .coverage-dialog {
+  max-width: 620px;
+  margin: 0;
+  padding: 18px 20px;
+  border-color: var(--console-line);
+  border-left: 3px solid var(--console-blue);
+  background: var(--console-soft);
+}
+
+.documents-total { color: var(--console-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.documents-action-queue { display: grid; gap: 2px; padding-top: 2px; }
+.documents-action-queue .console-list { margin: 0; border-block: 1px solid var(--console-line); }
+.documents-action-queue .console-list > li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px 16px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--console-line);
+}
+.documents-action-queue .console-list > li:last-child { border-bottom: 0; }
+.documents-action-queue .console-list > li > div { display: grid; gap: 3px; min-width: 0; }
+.documents-action-queue .console-list strong { overflow-wrap: anywhere; font-size: 12px; }
+.documents-action-queue .console-list span { color: var(--console-muted); font-size: 11px; overflow-wrap: anywhere; }
+.documents-screen > .data-toolbar { align-items: flex-end; margin: 0; padding-bottom: 14px; }
+.documents-screen > .data-toolbar .data-toolbar-controls,
+.documents-screen > .data-toolbar form { width: 100%; }
+.documents-screen .transaction-filters { margin: 0; padding: 0; border: 0; background: transparent; }
+.documents-screen .document-filter-primary { grid-template-columns: repeat(2, minmax(180px, 260px)); }
+.documents-screen .document-advanced-filters .transaction-filter-main { grid-template-columns: repeat(3, minmax(170px, 230px)); }
+.document-library-table { min-width: 1120px; }
+.document-library-table caption { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.document-library-table :is(th, td) { vertical-align: top; }
+.document-library-table td:first-child { width: 24%; max-width: 300px; white-space: normal; }
+.document-library-table td:nth-child(2) { min-width: 175px; white-space: normal; overflow-wrap: anywhere; }
+.document-library-table td:nth-child(3) { min-width: 225px; }
+.document-library-table td:nth-child(5) { min-width: 130px; }
+.document-library-table td:last-child { min-width: 330px; white-space: normal; }
+.document-library-table .document-actions { align-items: flex-start; margin: 0; }
+.document-library-table .document-record-details { flex-basis: 100%; padding-top: 3px; border-top: 0; }
+.document-library-table .document-record-details dl { grid-template-columns: repeat(2, minmax(130px, 1fr)); padding: 10px 12px; border-left: 2px solid var(--console-line-strong); background: var(--console-soft); }
+.document-repair-row > td { padding: 0 4px 14px; background: var(--console-soft); white-space: normal; }
+.documents-context-panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px 18px;
+  border-left: 3px solid var(--console-blue);
+  background: #fff;
+}
+.documents-context-panel:focus-visible { outline: 2px solid var(--console-blue); outline-offset: 2px; }
+.documents-context-panel > :is(p, [role="alert"]) { margin: 0; }
+
+.classification-review > .metric-strip { margin-top: 0; }
+.classification-review > .data-toolbar { margin: 0; padding-bottom: 14px; }
+.classification-review .classification-sort { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--console-muted); font-size: 11px; font-weight: 650; }
+.classification-review .classification-sort [data-slot="native-select"] { min-width: 190px; }
+.classification-review .classification-list { gap: 0; margin-top: 0; border-block: 1px solid var(--console-line); }
+.classification-review .classification-card {
+  gap: 11px;
+  padding: 16px 4px;
+  border: 0;
+  border-bottom: 1px solid var(--console-line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.classification-review .classification-card:last-child { border-bottom: 0; }
+.classification-review .classification-card--focus {
+  margin: 0;
+  padding: 18px 20px;
+  border: 1px solid var(--console-line-strong);
+  border-left: 3px solid var(--console-blue);
+  border-radius: 7px;
+  background: var(--console-blue-soft);
+  box-shadow: none;
+}
+.classification-review .classification-card--focus + .classification-card { border-top: 0; }
+.classification-review .classification-card-head { gap: 12px; }
+.classification-review .classification-card h2 { font-family: inherit; font-size: 13px; letter-spacing: normal; }
+.classification-review .classification-card--focus h2 { font-family: inherit; font-size: 15px; letter-spacing: normal; }
+.classification-review .classification-explanation { font-size: 12px; }
+.classification-review .classification-facts { grid-template-columns: repeat(4, minmax(120px, 1fr)); gap: 10px 18px; padding: 10px 0; border-color: var(--console-line); }
+.classification-review .classification-facts dt,
+.classification-review .classification-evidence-title { font-family: inherit; font-size: 10px; letter-spacing: 0.06em; }
+.classification-review .classification-facts dd { font-size: 12px; }
+.classification-review .classification-recent-runs { margin: 0; padding: 20px 0 0; border: 0; border-top: 1px solid var(--console-line); border-radius: 0; background: transparent; }
+.classification-review .classification-recent-runs > h2 { margin: 0 0 8px; font-size: 14px; }
+
+@media (max-width: 760px) {
+  .classification-review .classification-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 588px) {
+  .documents-action-queue .console-list > li { grid-template-columns: minmax(0, 1fr); }
+  .documents-action-queue .console-list > li > :is(a, button) { justify-self: start; }
+  .documents-screen > .data-toolbar { align-items: stretch; }
+  .documents-screen > .data-toolbar .data-toolbar-controls { width: 100%; }
+  .documents-screen .document-filter-primary,
+  .documents-screen .document-advanced-filters .transaction-filter-main { grid-template-columns: minmax(0, 1fr); }
+  .classification-review > .data-toolbar { align-items: stretch; }
+  .classification-review .classification-sort { align-items: stretch; flex-direction: column; }
+  .classification-review .classification-sort [data-slot="native-select"] { min-width: 0; }
+  .classification-review .classification-card--focus { padding: 16px; }
+  .classification-review .classification-card-head { align-items: flex-start; flex-direction: column; }
+  .classification-review .classification-facts { grid-template-columns: minmax(0, 1fr); }
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -18,10 +18,16 @@ type Props = {
 // newer layout would change, then apply. Nothing here bypasses `POST /import/{id}/
 // reparse-descriptions` — the same guarded re-read the API route already proves.
 export function DescriptionRepair({ document, request, onApplied }: Props) {
+  const regionRef = useRef<HTMLElement>(null);
   const [password, setPassword] = useState("");
   const [preview, setPreview] = useState<DescriptionReparseResult>();
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string>();
+
+  useEffect(() => {
+    regionRef.current?.scrollIntoView?.({ block: "center" });
+    regionRef.current?.focus();
+  }, []);
 
   async function run(apply: boolean) {
     setBusy(true);
@@ -50,7 +56,12 @@ export function DescriptionRepair({ document, request, onApplied }: Props) {
   }
 
   return (
-    <div className="description-repair">
+    <section
+      aria-label={`Re-read descriptions for ${document.title ?? document.documentType.replaceAll("_", " ")}`}
+      className="description-repair documents-context-panel"
+      ref={regionRef}
+      tabIndex={-1}
+    >
       <p className="section-label">A newer layout is available for this import.</p>
       {document.isPasswordProtected && (
         <label className="text-field">
@@ -91,6 +102,6 @@ export function DescriptionRepair({ document, request, onApplied }: Props) {
           </Button>
         )}
       </div>
-    </div>
+    </section>
   );
 }
