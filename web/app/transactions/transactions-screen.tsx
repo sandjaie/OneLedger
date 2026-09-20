@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { MoreHorizontalIcon, PlusIcon } from "lucide-react";
 
 import { errorText, type apiFetch } from "@/lib/api/client";
 import { apiUrl } from "@/lib/api/url";
@@ -10,6 +11,12 @@ import { PeerPicker, TransferQueue } from "@/app/transactions/transfer-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
+import { ConsolePageHeader } from "@/app/ui/console-page-header";
+import { DataTableRegion } from "@/app/ui/data-table-region";
+import { DataToolbar } from "@/app/ui/data-toolbar";
+import { MetricStrip } from "@/app/ui/metric-strip";
+import { RowActions } from "@/app/ui/row-actions";
+import { StatusLabel } from "@/app/ui/status-label";
 import { formatMoney, moneyText } from "@/lib/money/format";
 import type {
   AccountRow,
@@ -18,12 +25,14 @@ import type {
   HouseholdCurrency,
   HouseholdResponse,
   TransactionRow,
+  TransactionSummary,
   TransactionsResponse,
 } from "@/types/api";
 
 type Props = {
   transactions: Array<TransactionRow>;
   total: number;
+  summary: TransactionSummary;
   accounts: Array<AccountRow>;
   categories: Array<CategoryRow>;
   currencies: Array<CurrencyRow>;
@@ -119,7 +128,25 @@ const NO_FILTERS: Filters = {
   sourceDocumentId: "",
 };
 
+const CLASSIFIED_BY_VALUES: ReadonlyArray<string> = [
+  "unclassified",
+  "seed_rule",
+  "merchant_alias",
+  "recurring_series",
+  "prior_match",
+  "user_rule",
+  "user_manual",
+  "ai",
+];
+
 function query(filters: Filters, offset: number) {
+  const parameters = filterParameters(filters);
+  parameters.set("limit", String(PAGE));
+  parameters.set("offset", String(offset));
+  return `/transactions?${parameters.toString()}`;
+}
+
+function filterParameters(filters: Filters) {
   const parameters = new URLSearchParams();
   if (filters.transactionId) parameters.set("transactionId", filters.transactionId);
   if (filters.accountId) parameters.set("accountId", filters.accountId);
@@ -140,14 +167,40 @@ function query(filters: Filters, offset: number) {
     parameters.set("sourceDocumentId", filters.sourceDocumentId.trim());
   if (filters.sort !== "bookedDate") parameters.set("sort", filters.sort);
   if (filters.direction !== "desc") parameters.set("direction", filters.direction);
-  parameters.set("limit", String(PAGE));
-  parameters.set("offset", String(offset));
-  return `/transactions?${parameters.toString()}`;
+  return parameters;
+}
+
+const FILTER_KEYS = Object.keys(NO_FILTERS) as Array<keyof Filters>;
+
+function filtersFromLocation(fallback: Filters): Filters {
+  if (typeof window === "undefined") return fallback;
+  const parameters = new URLSearchParams(window.location.search);
+  const next = { ...fallback };
+  for (const key of FILTER_KEYS) {
+    const value = parameters.get(key);
+    if (value !== null) next[key] = value;
+  }
+  if (!ALL_TYPES.includes(next.txnType as (typeof ALL_TYPES)[number])) next.txnType = "";
+  if (!["bookedDate", "amount", "description", "account"].includes(next.sort)) {
+    next.sort = NO_FILTERS.sort;
+  }
+  if (!["asc", "desc"].includes(next.direction)) next.direction = NO_FILTERS.direction;
+  if (!["reviewed", "unreviewed"].includes(next.reviewState)) next.reviewState = "";
+  if (!CLASSIFIED_BY_VALUES.includes(next.classifiedBy)) next.classifiedBy = "";
+  return next;
+}
+
+function writeFiltersToLocation(filters: Filters) {
+  if (typeof window === "undefined") return;
+  const parameters = filterParameters(filters);
+  const search = parameters.toString();
+  window.history.pushState(null, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
 }
 
 export function TransactionsScreen({
   transactions,
   total,
+  summary,
   accounts,
   categories,
   currencies,
@@ -169,12 +222,16 @@ export function TransactionsScreen({
     dateFrom: initialDateFrom ?? "",
     dateTo: initialDateTo ?? "",
   };
+  const firstFilters = filtersFromLocation(initialFilters);
   const [rows, setRows] = useState(transactions);
   const [count, setCount] = useState(total);
-  const [filters, setFilters] = useState<Filters>(initialFilters);
+  const [transactionSummary, setTransactionSummary] = useState(summary);
+  const [summaryReady, setSummaryReady] = useState(true);
+  const [filters, setFilters] = useState<Filters>(firstFilters);
   // Pagination continues the APPLIED set: edited-but-unapplied controls must not leak into
   // "Load more", or the ledger would append one result set onto another.
-  const [applied, setApplied] = useState<Filters>(initialFilters);
+  const [applied, setApplied] = useState<Filters>(firstFilters);
+  const requestSequence = useRef(0);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string>();
   const [entryOpen, setEntryOpen] = useState(false);
@@ -256,19 +313,41 @@ export function TransactionsScreen({
     return currency.code === household.baseCurrency ? row.fxRateToBase : row.fxRateToSecondary;
   }
 
-  async function reload(nextFilters: Filters, offset: number, append: boolean) {
+  const reload = useCallback(async (nextFilters: Filters, offset: number, append: boolean) => {
+    const sequence = ++requestSequence.current;
     setBusy(true);
+    if (!append) setSummaryReady(false);
     setProblem(undefined);
     try {
       const page = await request<TransactionsResponse>(query(nextFilters, offset));
+      if (sequence !== requestSequence.current) return;
       setRows((current) => (append ? [...current, ...page.transactions] : page.transactions));
       setCount(page.total);
+      if (page.summary) {
+        setTransactionSummary(page.summary);
+        setSummaryReady(true);
+      }
     } catch {
+      if (sequence !== requestSequence.current) return;
       setProblem("The ledger could not be loaded. Check the API service and retry.");
     } finally {
-      setBusy(false);
+      if (sequence === requestSequence.current) setBusy(false);
     }
-  }
+  }, [request]);
+
+  useEffect(() => {
+    function restoreFromHistory() {
+      const restored = filtersFromLocation(NO_FILTERS);
+      setFilters(restored);
+      setApplied(restored);
+      void reload(restored, 0, false);
+    }
+    window.addEventListener("popstate", restoreFromHistory);
+    return () => {
+      window.removeEventListener("popstate", restoreFromHistory);
+      requestSequence.current += 1;
+    };
+  }, [reload]);
 
   // A link or an unlink changes two rows this ledger is showing and the balances behind
   // them, so the applied view reloads and the workspace is told.
@@ -283,6 +362,7 @@ export function TransactionsScreen({
     notes: string | null,
     bubbleError = false,
   ) {
+    const categoryChanged = categoryId !== row.categoryId;
     setBusy(true);
     setProblem(undefined);
     try {
@@ -291,10 +371,10 @@ export function TransactionsScreen({
         body: JSON.stringify({ categoryId, notes }),
         headers: { "Content-Type": "application/json" },
       });
-      if (applied.categoryId || applied.reviewState || applied.classifiedBy) {
-        // The row may no longer match the applied category filter — and every PATCH marks the
-        // row reviewed, so an unreviewed filter goes stale the same way. A stale local
-        // replacement would also make the next page's offset skip a real match.
+      if (categoryChanged || applied.categoryId || applied.reviewState || applied.classifiedBy) {
+        // A category change also changes review/classification state and the filtered summary.
+        // A stale local replacement may therefore show wrong totals or make the next page's
+        // offset skip a real match.
         await reload(applied, 0, false);
       } else {
         setRows((current) => current.map((one) => (one.id === updated.id ? updated : one)));
@@ -391,26 +471,33 @@ export function TransactionsScreen({
     }
   }
 
+  const usingBaseCurrency = currency.code === household.baseCurrency;
+  const summaryIncome = usingBaseCurrency
+    ? transactionSummary.reportableIncomeBase
+    : transactionSummary.reportableIncomeSecondary;
+  const summarySpending = usingBaseCurrency
+    ? transactionSummary.reportableSpendingBase
+    : transactionSummary.reportableSpendingSecondary;
+
   return (
     <section className="workspace-content transactions-screen" aria-labelledby="transactions-title">
-      <header className="transaction-page-head">
-        <div>
-          <h1 className="workspace-title" id="transactions-title">Transactions</h1>
-          <p className="transaction-summary">
-            {count} {count === 1 ? "transaction" : "transactions"} · {active.length} active{" "}
-            {active.length === 1 ? "account" : "accounts"}
-          </p>
-        </div>
-        <Button
-          aria-controls="manual-transaction-entry"
-          aria-expanded={entryOpen}
-          onClick={() => setEntryOpen((open) => !open)}
-          type="button"
-          variant="outline"
-        >
-          {entryOpen ? "Close manual entry" : "Record a transaction"}
-        </Button>
-      </header>
+      <div id="transactions-title">
+        <ConsolePageHeader
+          actions={(
+            <Button
+              aria-controls="manual-transaction-entry"
+              aria-expanded={entryOpen}
+              onClick={() => setEntryOpen((open) => !open)}
+              type="button"
+            >
+              <PlusIcon aria-hidden="true" />
+              {entryOpen ? "Close manual entry" : "Record a transaction"}
+            </Button>
+          )}
+          description={`${count} ${count === 1 ? "transaction" : "transactions"} · ${active.length} active ${active.length === 1 ? "account" : "accounts"}`}
+          title="Transactions"
+        />
+      </div>
       {problem && <p className="inline-alert" role="alert">{problem}</p>}
 
       {entryOpen && <form
@@ -499,15 +586,38 @@ export function TransactionsScreen({
         </div>
       </form>}
 
+      {summaryReady && <MetricStrip
+        items={[
+          {
+            label: "Reportable income",
+            value: formatMoney(summaryIncome, currency),
+            detail: "Filtered reportable rows",
+          },
+          {
+            label: "Reportable spending",
+            value: formatMoney(summarySpending, currency),
+            detail: "Refunds reduce this total",
+          },
+          {
+            label: "Needs review",
+            value: `${transactionSummary.attentionCount} ${transactionSummary.attentionCount === 1 ? "item" : "items"}`,
+            detail: `${transactionSummary.unreviewedCount} unreviewed · ${transactionSummary.uncategorizedCount} uncategorized`,
+          },
+        ]}
+        label="Filtered transaction summary"
+      />}
+
       <form
         aria-label="Filter the ledger"
         className="transaction-filters"
         onSubmit={(event) => {
           event.preventDefault();
           setApplied(filters);
+          writeFiltersToLocation(filters);
           void reload(filters, 0, false);
         }}
       >
+        <DataToolbar summary={`${count} matching ${count === 1 ? "row" : "rows"}`}>
         <div className="transaction-filter-main">
         <label className="text-field">
           <span>Search descriptions</span>
@@ -540,18 +650,6 @@ export function TransactionsScreen({
             ))}
           </NativeSelect>
         </label>
-        <label className="select-field">
-          <span>Type</span>
-          <NativeSelect
-            onChange={(event) => setFilters({ ...filters, txnType: event.target.value })}
-            value={filters.txnType}
-          >
-            <option value="">All types</option>
-            {ALL_TYPES.map((value) => (
-              <option key={value} value={value}>{value}</option>
-            ))}
-          </NativeSelect>
-        </label>
         <label className="date-field">
           <span>From</span>
           <Input
@@ -572,6 +670,18 @@ export function TransactionsScreen({
         <details className="transaction-filter-advanced">
           <summary>More filters</summary>
           <div className="transaction-filter-advanced-fields">
+        <label className="select-field">
+          <span>Type</span>
+          <NativeSelect
+            onChange={(event) => setFilters({ ...filters, txnType: event.target.value })}
+            value={filters.txnType}
+          >
+            <option value="">All types</option>
+            {ALL_TYPES.map((value) => (
+              <option key={value} value={value}>{value}</option>
+            ))}
+          </NativeSelect>
+        </label>
         <label className="text-field">
           <span>Amount from</span>
           <Input
@@ -650,6 +760,13 @@ export function TransactionsScreen({
           >
             <option value="">All rows</option>
             <option value="unclassified">Needs a category</option>
+            <option value="seed_rule">Seed rule</option>
+            <option value="merchant_alias">Merchant alias</option>
+            <option value="recurring_series">Recurring series</option>
+            <option value="prior_match">Prior match</option>
+            <option value="user_rule">Owner rule</option>
+            <option value="user_manual">Owner decision</option>
+            <option value="ai">AI</option>
           </NativeSelect>
         </label>
         <label className="select-field">
@@ -678,7 +795,21 @@ export function TransactionsScreen({
         </details>
         <div className="account-form-actions">
           <Button disabled={busy} type="submit">Apply filters</Button>
+          <Button
+            disabled={busy}
+            onClick={() => {
+              setFilters(NO_FILTERS);
+              setApplied(NO_FILTERS);
+              writeFiltersToLocation(NO_FILTERS);
+              void reload(NO_FILTERS, 0, false);
+            }}
+            type="button"
+            variant="outline"
+          >
+            Clear
+          </Button>
         </div>
+        </DataToolbar>
       </form>
 
       <TransferQueue
@@ -704,16 +835,18 @@ export function TransactionsScreen({
           a statement.
         </p>
       ) : (
-        <div className="transaction-table-wrap" role="region" aria-label="Transaction ledger" tabIndex={0}>
-          <table className="account-table transaction-ledger">
+        <DataTableRegion label="Transaction ledger">
+          <table className="account-table console-table transaction-ledger">
           <caption className="visually-hidden">The transaction ledger</caption>
           <thead>
             <tr>
               <th scope="col">Date</th>
               <th scope="col">Description</th>
-              <th scope="col">Category</th>
               <th scope="col">Account</th>
+              <th scope="col">Category</th>
+              <th scope="col">Evidence</th>
               <th scope="col">Amount</th>
+              <th scope="col"><span className="visually-hidden">Actions</span></th>
             </tr>
           </thead>
           <tbody>
@@ -780,28 +913,6 @@ export function TransactionsScreen({
                   )}
                   {row.parentTransactionId && <small> · split</small>}
                   <small> · {row.source}</small>
-                  {row.sourceDocumentId && (
-                    <small>
-                      {" "}
-                      ·{" "}
-                      <a
-                        href={apiUrl(`/documents/${row.sourceDocumentId}/original`)}
-                        rel="noreferrer"
-                        target="_blank"
-                      >
-                        Page {row.sourcePageNumber} · row {row.sourceRowNumber}
-                      </a>
-                    </small>
-                  )}
-                  <label className="text-field">
-                    <span className="visually-hidden">Note for {row.descriptionRaw}</span>
-                    <Input
-                      defaultValue={row.notes ?? ""}
-                      disabled={busy}
-                      onBlur={(event) => void saveNote(row, event.target.value)}
-                      placeholder="Add a note"
-                    />
-                  </label>
                   {subscribingId === row.id && (
                     <div className="recurring-dismiss-form">
                       <label className="text-field">
@@ -871,6 +982,7 @@ export function TransactionsScreen({
                     </div>
                   )}
                 </td>
+                <td className="transaction-account">{row.accountName}</td>
                 <td className="transaction-category">
                   <label className="select-field">
                     <span className="visually-hidden">Category for {row.descriptionRaw}</span>
@@ -900,8 +1012,22 @@ export function TransactionsScreen({
                     <small>Category no longer listed</small>
                   )}
                 </td>
-                <td className="transaction-account">{row.accountName}</td>
-                <td className={row.amount.startsWith("-") ? "transaction-amount" : "transaction-amount positive"}>
+                <td className="transaction-evidence">
+                  {row.transferId ? (
+                    <StatusLabel tone="success">Linked</StatusLabel>
+                  ) : row.isSplitParent || row.parentTransactionId ? (
+                    <StatusLabel>Split</StatusLabel>
+                  ) : row.isExcluded ? (
+                    <StatusLabel>Excluded</StatusLabel>
+                  ) : row.sourceDocumentId ? (
+                    <StatusLabel tone="success">Imported</StatusLabel>
+                  ) : row.classifiedBy === "unclassified" ? (
+                    <StatusLabel tone="attention">Needs category</StatusLabel>
+                  ) : (
+                    <StatusLabel>Recorded</StatusLabel>
+                  )}
+                </td>
+                <td className={row.amount.startsWith("-") ? "console-number transaction-amount" : "console-number transaction-amount positive"}>
                   <span>{original(row)}</span>
                   {bankOriginal(row) && <small> · originally {bankOriginal(row)}</small>}
                   {converted(row) && <small> · {converted(row)}</small>}
@@ -910,12 +1036,38 @@ export function TransactionsScreen({
                     {row.fxRateIsCarried ? " (carried forward)" : ""}
                   </small>
                 </td>
+                <td className="transaction-row-actions">
+                  <RowActions
+                    floating
+                    label={`More actions for ${row.descriptionRaw}`}
+                    triggerContent={<MoreHorizontalIcon aria-hidden="true" />}
+                  >
+                    {row.sourceDocumentId && (
+                      <a
+                        href={apiUrl(`/documents/${row.sourceDocumentId}/original`)}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        Page {row.sourcePageNumber} · row {row.sourceRowNumber}
+                      </a>
+                    )}
+                    <label className="text-field">
+                      <span>Note for {row.descriptionRaw}</span>
+                      <Input
+                        defaultValue={row.notes ?? ""}
+                        disabled={busy}
+                        onBlur={(event) => void saveNote(row, event.target.value)}
+                        placeholder="Add a note"
+                      />
+                    </label>
+                  </RowActions>
+                </td>
               </tr>
               );
             })}
           </tbody>
           </table>
-        </div>
+        </DataTableRegion>
       )}
 
       {classifying && (

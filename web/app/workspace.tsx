@@ -133,6 +133,9 @@ function transactionIdFromLocation() {
 // filter form is not the set the form describes.
 function transactionsQueryFromLocation(categories: Array<CategoryRow> | undefined) {
   const parameters = new URLSearchParams({ limit: "50", offset: "0" });
+  const locationParameters = typeof window === "undefined"
+    ? new URLSearchParams()
+    : new URLSearchParams(window.location.search);
   const transactionId = transactionIdFromLocation();
   if (transactionId) parameters.set("transactionId", transactionId);
   const sourceDocumentId = sourceDocumentIdFromLocation();
@@ -143,6 +146,27 @@ function transactionsQueryFromLocation(categories: Array<CategoryRow> | undefine
   if (dateFrom) parameters.set("dateFrom", dateFrom);
   const dateTo = dateFromLocation("dateTo");
   if (dateTo) parameters.set("dateTo", dateTo);
+  // These filters are already validated by the API's typed query contract. Copy only the
+  // supported names: pagination remains owned by Workspace and unknown URL state never reaches
+  // the ledger endpoint.
+  for (const name of [
+    "accountId",
+    "txnType",
+    "q",
+    "amountMin",
+    "amountMax",
+    "currency",
+    "country",
+    "tag",
+    "reviewState",
+    "classifiedBy",
+    "merchantId",
+    "sort",
+    "direction",
+  ]) {
+    const value = locationParameters.get(name);
+    if (value) parameters.set(name, value);
+  }
   return parameters.toString();
 }
 
@@ -451,6 +475,7 @@ export function Workspace({
               initialDateTo={dateFromLocation("dateTo")}
               onChanged={() => setAttempt((value) => value + 1)}
               request={wrappedRequest}
+              summary={ledger.summary}
               total={ledger.total}
               transactions={ledger.transactions}
             />

@@ -164,6 +164,7 @@ describe("the transfer queue", () => {
     queue(request);
 
     expect(request).not.toHaveBeenCalled();
+    expect(document.querySelector(".attention-row")?.textContent).toContain("Transfers");
     const find = screen.getByRole("button", { name: "Find transfers" });
     expect(find.getAttribute("data-slot")).toBe("button");
     fireEvent.click(find);

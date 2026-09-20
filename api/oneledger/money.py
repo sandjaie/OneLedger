@@ -10,7 +10,7 @@ import re
 from collections.abc import Mapping
 from datetime import date
 from decimal import ROUND_HALF_EVEN, ROUND_HALF_UP, Decimal, InvalidOperation
-from typing import Any
+from typing import Any, overload
 
 import psycopg
 from fastapi import HTTPException
@@ -58,6 +58,14 @@ def _money(value: str | None) -> str | None:
     if not isinstance(value, str) or not MONEY.fullmatch(value):
         raise ValueError("money must be a decimal string with at most four decimal places")
     return value
+
+
+@overload
+def _out(value: Decimal) -> str: ...
+
+
+@overload
+def _out(value: None) -> None: ...
 
 
 def _out(value: Decimal | None) -> str | None:

@@ -3180,3 +3180,111 @@ body {
 .console-entity .account-identifier { gap: 0; }
 .console-entity .account-identifier-kind { font-size: 10px; }
 .console-entity .account-identifier-line { font-size: 11px; }
+
+/* Phase 4.8 Task 4 — activity screens share the same compact hierarchy. Filters and period
+   controls stay in one toolbar; wide evidence tables scroll inside their labelled region. */
+.workspace-content.transactions-screen,
+.workspace-content.spending-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  max-width: none;
+  min-width: 0;
+}
+.workspace-content:is(.transactions-screen, .spending-screen) > * { min-width: 0; }
+.transactions-screen .console-page-header,
+.spending-screen .console-page-header { margin-bottom: 0; }
+.transactions-screen .metric-strip,
+.spending-screen .metric-strip { padding-block: 14px; }
+
+.transactions-screen .transaction-filters { display: block; padding: 0; border: 0; }
+.transactions-screen .transaction-filters .data-toolbar { align-items: flex-end; margin: 0; }
+.transactions-screen .transaction-filters .data-toolbar-controls { width: 100%; align-items: flex-end; }
+.transactions-screen .transaction-filter-main {
+  display: grid;
+  flex: 1 1 760px;
+  grid-template-columns: minmax(180px, 2fr) repeat(4, minmax(118px, 1fr));
+  gap: 8px;
+}
+.transactions-screen .transaction-filter-main > :first-child { grid-column: auto; }
+.transactions-screen .transaction-filter-advanced { flex: 0 0 auto; }
+.transactions-screen .transaction-filter-advanced-fields { grid-template-columns: repeat(4, minmax(140px, 1fr)); }
+.transactions-screen .account-form-actions { display: flex; gap: 8px; }
+.transactions-screen .data-table-region { border-block: 1px solid var(--console-line); }
+.transactions-screen .transaction-ledger { min-width: 1080px; border: 0; border-radius: 0; }
+.transactions-screen .transaction-ledger :is(th, td) { vertical-align: top; }
+.transactions-screen .transaction-description { min-width: 280px; white-space: normal; }
+.transactions-screen .transaction-description-raw { font-weight: 600; }
+.transactions-screen .transaction-account { min-width: 130px; white-space: normal; }
+.transactions-screen .transaction-evidence { min-width: 112px; }
+.transactions-screen .transaction-amount { min-width: 190px; }
+.transactions-screen .transaction-row-actions { width: 1%; text-align: right; }
+.transactions-screen .transaction-transfer-panel { display: block; padding: 0; border: 0; background: transparent; }
+.transactions-screen .transaction-transfer-panel > .attention-row { margin: 0; }
+.transactions-screen .transaction-transfer-panel > :not(.attention-row) { margin-top: 12px; }
+.transactions-screen .transaction-classify-prompt { border-color: var(--console-line-strong); background: #fff; }
+.transactions-screen .row-actions-content .text-field { min-width: 210px; padding: 6px; }
+.transactions-screen .row-actions-content > a {
+  width: 100%;
+  padding: 7px 8px;
+  border-radius: 5px;
+  color: var(--console-blue);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.transactions-screen .row-actions-content > a:hover { background: var(--console-blue-soft); }
+
+.spending-screen .experience-disclosure { margin: -10px 0 0; }
+.spending-screen > .data-toolbar { margin: 0; }
+.spending-screen .console-section-head { margin-top: 2px; }
+.spending-screen .console-section-head > div { min-width: 0; }
+.spending-screen .console-section-head p {
+  max-width: 74ch;
+  margin: 5px 0 0;
+  color: var(--console-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.spending-screen .spending-evidence-chart {
+  margin: 0;
+  padding: 18px 0;
+  border: 0;
+  border-bottom: 1px solid var(--console-line);
+  border-radius: 0;
+  background: transparent;
+}
+.spending-screen .spending-evidence-plot { height: clamp(210px, 25vw, 320px); }
+.spending-screen .data-table-region { border-bottom: 1px solid var(--console-line); }
+.spending-screen .spending-table { min-width: 650px; margin: 0; }
+.spending-screen .spending-table--category { min-width: 760px; }
+.spending-screen .budget-panel {
+  margin-top: 4px;
+  padding: 22px 0 0;
+  border: 0;
+  border-top: 1px solid var(--console-line);
+  border-radius: 0;
+  background: transparent;
+}
+
+@media (max-width: 1024px) {
+  .transactions-screen .transaction-filter-main {
+    grid-template-columns: minmax(180px, 2fr) repeat(2, minmax(118px, 1fr));
+  }
+  .transactions-screen .transaction-filter-main > :first-child { grid-row: span 2; }
+}
+
+@media (max-width: 588px) {
+  .transactions-screen .transaction-filter-main { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .transactions-screen .transaction-filter-main > :first-child { grid-column: 1 / -1; grid-row: auto; }
+  .transactions-screen .transaction-filter-advanced { flex-basis: 100%; }
+  .transactions-screen .transaction-filter-advanced-fields { grid-template-columns: minmax(0, 1fr); }
+  .transactions-screen .account-form-actions { flex: 1 1 100%; }
+  .transactions-screen .account-form-actions > [data-slot="button"] { flex: 1 1 auto; }
+  .spending-screen > .data-toolbar .data-toolbar-controls { width: 100%; }
+}
+
+@media (max-width: 420px) {
+  .transactions-screen .transaction-filter-main { grid-template-columns: minmax(0, 1fr); }
+  .transactions-screen .console-page-actions > [data-slot="button"] { width: 100%; }
+}

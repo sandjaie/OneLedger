@@ -10392,6 +10392,56 @@ export type TransactionRow = {
 };
 
 /**
+ * TransactionSummary
+ */
+export type TransactionSummary = {
+    /**
+     * Reportableincomebase
+     */
+    reportableIncomeBase: string;
+    /**
+     * Reportableincomesecondary
+     */
+    reportableIncomeSecondary: string;
+    /**
+     * Reportablespendingbase
+     */
+    reportableSpendingBase: string;
+    /**
+     * Reportablespendingsecondary
+     */
+    reportableSpendingSecondary: string;
+    /**
+     * Reportablenetbase
+     */
+    reportableNetBase: string;
+    /**
+     * Reportablenetsecondary
+     */
+    reportableNetSecondary: string;
+    /**
+     * Unreviewedcount
+     */
+    unreviewedCount: number;
+    /**
+     * Uncategorizedcount
+     */
+    uncategorizedCount: number;
+    /**
+     * Attentioncount
+     */
+    attentionCount: number;
+    /**
+     * Moneyscope
+     */
+    moneyScope: 'reportable';
+    /**
+     * Attentionscope
+     */
+    attentionScope: 'ledger';
+};
+
+/**
  * TransactionUpdate
  *
  * The two owner-editable fields, always sent — omitting notes would silently erase an
@@ -10421,6 +10471,7 @@ export type TransactionsResponse = {
      * Total
      */
     total: number;
+    summary: TransactionSummary;
 };
 
 /**

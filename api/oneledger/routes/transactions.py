@@ -8,9 +8,10 @@ spending or income aggregate reads v_transaction_reportable."""
 from __future__ import annotations
 
 import hashlib
+from dataclasses import dataclass
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 import psycopg
@@ -64,9 +65,24 @@ class TransactionRow(BaseModel):
     sourceRowNumber: int | None
 
 
+class TransactionSummary(BaseModel):
+    reportableIncomeBase: str
+    reportableIncomeSecondary: str
+    reportableSpendingBase: str
+    reportableSpendingSecondary: str
+    reportableNetBase: str
+    reportableNetSecondary: str
+    unreviewedCount: int
+    uncategorizedCount: int
+    attentionCount: int
+    moneyScope: Literal["reportable"]
+    attentionScope: Literal["ledger"]
+
+
 class TransactionsResponse(BaseModel):
     transactions: list[TransactionRow]
     total: int
+    summary: TransactionSummary
 
 
 class TransactionCreate(BaseModel):
@@ -206,6 +222,76 @@ def _money_query(value: str | None) -> Decimal | None:
         return Decimal(_money(value) or "0")
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@dataclass(frozen=True, slots=True)
+class TransactionFilter:
+    """The complete filter contract shared by every ledger read in ``GET /transactions``.
+
+    Page controls are deliberately absent. Building this once prevents a visible row set, its
+    count, its attention state and its reportable money from quietly describing different
+    populations as filters evolve.
+    """
+
+    transaction_id: UUID | None = None
+    account_id: UUID | None = None
+    category_id: UUID | None = None
+    txn_type: str | None = None
+    date_from: date | None = None
+    date_to: date | None = None
+    query: str | None = None
+    merchant_id: UUID | None = None
+    currency: str | None = None
+    country: str | None = None
+    amount_min: Decimal | None = None
+    amount_max: Decimal | None = None
+    tag: str | None = None
+    review_state: str | None = None
+    classified_by: str | None = None
+    source_document_id: UUID | None = None
+
+    def predicate(self, household_id: UUID) -> TransactionPredicate:
+        clauses = ["t.household_id = %s"]
+        params: list[Any] = [household_id]
+        pairs: tuple[tuple[str, Any], ...] = (
+            ("t.id = %s", self.transaction_id),
+            ("t.account_id = %s", self.account_id),
+            ("t.category_id = %s", self.category_id),
+            ("t.booked_date >= %s", self.date_from),
+            ("t.booked_date <= %s", self.date_to),
+            ("t.merchant_id = %s", self.merchant_id),
+            ("t.currency = %s", self.currency),
+            ("t.country = %s", self.country),
+            ("t.amount >= %s", self.amount_min),
+            ("t.amount <= %s", self.amount_max),
+            ("%s = ANY(t.tags)", self.tag),
+            ("t.source_document_id = %s", self.source_document_id),
+        )
+        for clause, value in pairs:
+            if value is not None:
+                clauses.append(clause)
+                params.append(value)
+        if self.txn_type is not None:
+            clauses.append("t.txn_type = %s::txn_type")
+            params.append(self.txn_type)
+        if self.query is not None and self.query.strip():
+            clauses.append(
+                "to_tsvector('simple', t.description_raw) @@ plainto_tsquery('simple', %s)"
+            )
+            params.append(self.query.strip())
+        if self.review_state is not None:
+            clauses.append("t.is_reviewed = %s")
+            params.append(self.review_state == "reviewed")
+        if self.classified_by is not None:
+            clauses.append("t.classified_by = %s::classified_by")
+            params.append(self.classified_by)
+        return TransactionPredicate(sql=" AND ".join(clauses), params=tuple(params))
+
+
+@dataclass(frozen=True, slots=True)
+class TransactionPredicate:
+    sql: str
+    params: tuple[Any, ...]
 
 
 def _assert_category_allowed(
@@ -412,59 +498,25 @@ def list_transactions(
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> TransactionsResponse:
-    clauses = ["t.household_id = %s"]
-    params: list[Any] = [owner.household_id]
-    if transactionId is not None:
-        clauses.append("t.id = %s")
-        params.append(transactionId)
-    if accountId is not None:
-        clauses.append("t.account_id = %s")
-        params.append(accountId)
-    if categoryId is not None:
-        clauses.append("t.category_id = %s")
-        params.append(categoryId)
-    if txnType is not None:
-        clauses.append("t.txn_type = %s::txn_type")
-        params.append(txnType)
-    if dateFrom is not None:
-        clauses.append("t.booked_date >= %s")
-        params.append(dateFrom)
-    if dateTo is not None:
-        clauses.append("t.booked_date <= %s")
-        params.append(dateTo)
-    if q is not None and q.strip():
-        # The V10 GIN index is on to_tsvector('simple', description_raw); this predicate is
-        # the one it serves. Word search, parameterised, never interpolated.
-        clauses.append("to_tsvector('simple', t.description_raw) @@ plainto_tsquery('simple', %s)")
-        params.append(q.strip())
-    if merchantId is not None:
-        clauses.append("t.merchant_id = %s")
-        params.append(merchantId)
-    if currency is not None:
-        clauses.append("t.currency = %s")
-        params.append(currency)
-    if country is not None:
-        clauses.append("t.country = %s")
-        params.append(country)
-    if amountMin is not None:
-        clauses.append("t.amount >= %s")
-        params.append(_money_query(amountMin))
-    if amountMax is not None:
-        clauses.append("t.amount <= %s")
-        params.append(_money_query(amountMax))
-    if tag is not None:
-        clauses.append("%s = ANY(t.tags)")
-        params.append(tag)
-    if reviewState is not None:
-        clauses.append("t.is_reviewed = %s")
-        params.append(reviewState == "reviewed")
-    if classifiedBy is not None:
-        clauses.append("t.classified_by = %s::classified_by")
-        params.append(classifiedBy)
-    if sourceDocumentId is not None:
-        clauses.append("t.source_document_id = %s")
-        params.append(sourceDocumentId)
-    where = " AND ".join(clauses)
+    filters = TransactionFilter(
+        transaction_id=transactionId,
+        account_id=accountId,
+        category_id=categoryId,
+        txn_type=txnType,
+        date_from=dateFrom,
+        date_to=dateTo,
+        query=q,
+        merchant_id=merchantId,
+        currency=currency,
+        country=country,
+        amount_min=_money_query(amountMin),
+        amount_max=_money_query(amountMax),
+        tag=tag,
+        review_state=reviewState,
+        classified_by=classifiedBy,
+        source_document_id=sourceDocumentId,
+    )
+    predicate = filters.predicate(owner.household_id)
     # A dictionary of static fragments: user input selects a key, never SQL text.
     order = {
         "bookedDate": "t.booked_date",
@@ -475,25 +527,72 @@ def list_transactions(
 
     try:
         with connect() as conn, conn.cursor() as cur:
+            cur.execute("SET TRANSACTION READ ONLY")
             cur.execute(
-                f"SELECT count(*) FROM transaction t WHERE {where}".replace(
-                    "t.household_id", "household_id"
-                ).replace("t.", ""),
-                tuple(params),
+                f"SELECT count(*) FROM transaction t WHERE {predicate.sql}",
+                predicate.params,
             )
             counted = cur.fetchone()
             total = int(counted[0]) if counted else 0
             cur.execute(
+                f"""SELECT count(*) FILTER (WHERE NOT t.is_reviewed),
+                            count(*) FILTER (WHERE t.classified_by = 'unclassified'),
+                            count(*) FILTER (
+                                WHERE NOT t.is_reviewed OR t.classified_by = 'unclassified'
+                            )
+                       FROM transaction t
+                      WHERE {predicate.sql}""",
+                predicate.params,
+            )
+            attention_row = cur.fetchone() or (0, 0, 0)
+            cur.execute(
+                f"""SELECT
+                            COALESCE(sum(t.amount_base)
+                                FILTER (WHERE t.txn_type = 'income'), 0.0000::NUMERIC(20,4)),
+                            COALESCE(sum(t.amount_secondary)
+                                FILTER (WHERE t.txn_type = 'income'), 0.0000::NUMERIC(20,4)),
+                            COALESCE(-sum(t.amount_base)
+                                FILTER (WHERE t.txn_type <> 'income'), 0.0000::NUMERIC(20,4)),
+                            COALESCE(-sum(t.amount_secondary)
+                                FILTER (WHERE t.txn_type <> 'income'), 0.0000::NUMERIC(20,4))
+                       FROM v_transaction_reportable t
+                      WHERE {predicate.sql}""",
+                predicate.params,
+            )
+            money_row = cur.fetchone() or (
+                Decimal("0"),
+                Decimal("0"),
+                Decimal("0"),
+                Decimal("0"),
+            )
+            income_base = Decimal(money_row[0])
+            income_secondary = Decimal(money_row[1])
+            spending_base = Decimal(money_row[2])
+            spending_secondary = Decimal(money_row[3])
+            summary = TransactionSummary(
+                reportableIncomeBase=_out(income_base),
+                reportableIncomeSecondary=_out(income_secondary),
+                reportableSpendingBase=_out(spending_base),
+                reportableSpendingSecondary=_out(spending_secondary),
+                reportableNetBase=_out(income_base - spending_base),
+                reportableNetSecondary=_out(income_secondary - spending_secondary),
+                unreviewedCount=int(attention_row[0]),
+                uncategorizedCount=int(attention_row[1]),
+                attentionCount=int(attention_row[2]),
+                moneyScope="reportable",
+                attentionScope="ledger",
+            )
+            cur.execute(
                 f"""SELECT {COLUMNS} {FROM}
-                     WHERE {where}
+                     WHERE {predicate.sql}
                      ORDER BY {order}, t.created_at DESC, t.id DESC
                      LIMIT %s OFFSET %s""",
-                (*params, limit, offset),
+                (*predicate.params, limit, offset),
             )
             rows = [public_transaction_row(transaction_row(row)) for row in cur.fetchall()]
     except psycopg.errors.InvalidTextRepresentation as exc:
         raise HTTPException(status_code=422, detail=first_line(exc)) from exc
-    return TransactionsResponse(transactions=rows, total=total)
+    return TransactionsResponse(transactions=rows, total=total, summary=summary)
 
 
 @router.post("/transactions", status_code=201)

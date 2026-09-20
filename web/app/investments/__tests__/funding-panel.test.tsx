@@ -12,6 +12,7 @@ import type {
   HoldingCashLink,
   InvestmentEventRow,
   TransactionRow,
+  TransactionSummary,
   TransactionsResponse,
 } from "@/types/api";
 
@@ -24,6 +25,14 @@ const CASH_TRANSFER = "00000000-0000-4000-8000-000000000203";
 // Never appears among the candidate `transactions` fixture below — a seeded link naming it
 // stays "unloaded" no matter what the owner does in the panel.
 const CASH_SEEDED = "00000000-0000-4000-8000-000000000205";
+
+const EMPTY_TRANSACTION_SUMMARY: TransactionSummary = {
+  reportableIncomeBase: "0.0000", reportableIncomeSecondary: "0.0000",
+  reportableSpendingBase: "0.0000", reportableSpendingSecondary: "0.0000",
+  reportableNetBase: "0.0000", reportableNetSecondary: "0.0000",
+  unreviewedCount: 0, uncategorizedCount: 0, attentionCount: 0,
+  moneyScope: "reportable", attentionScope: "ledger",
+};
 
 function investmentEvent(overrides: Partial<InvestmentEventRow> = {}): InvestmentEventRow {
   return {
@@ -103,6 +112,7 @@ const transactions: TransactionsResponse = {
     cash({ id: CASH_TRANSFER, descriptionRaw: "Synthetic confirmed transfer leg", transferId: "00000000-0000-4000-8000-000000000501" }),
   ],
   total: 3,
+  summary: EMPTY_TRANSACTION_SUMMARY,
 };
 
 function candidateReads(rows = transactions) {
@@ -620,7 +630,7 @@ describe("investment funding", () => {
     expect((await screen.findByRole("alert")).textContent).toBe("owner session required");
     fireEvent.click(screen.getByRole("button", { name: "Try cash entries again" }));
     expect(screen.getByText("Loading cash entries…")).toBeTruthy();
-    release({ transactions: [], total: 0 });
+    release({ transactions: [], total: 0, summary: EMPTY_TRANSACTION_SUMMARY });
     expect(await screen.findByText("No eligible cash debits are recorded.")).toBeTruthy();
   });
 

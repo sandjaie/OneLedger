@@ -120,6 +120,12 @@ describe("spending screen", () => {
     expect(screen.getAllByText("AED 100.0000").length).toBeGreaterThan(0);
     expect(screen.getAllByText("AED 70.0000").length).toBeGreaterThan(0);
     screen.getByText("AED 130.0000");
+    const metrics = screen.getByRole("region", { name: "Spending summary" });
+    expect(metrics.textContent).toContain("This period");
+    expect(metrics.textContent).toContain("Previous period");
+    expect(screen.getByRole("group", { name: "Date range" }).className).toContain("data-toolbar");
+    expect(document.querySelector(".spending-evidence-chart")?.getAttribute("data-dense")).toBe("true");
+    expect(screen.getByRole("table", { name: "Spending by bucket" }).className).toContain("console-table");
     expect(screen.getByRole("table", { name: "Spending by bucket" }).classList.contains("spending-table--bucket")).toBe(true);
     expect(screen.getByRole("table", { name: "Spending by category" }).classList.contains("spending-table--category")).toBe(true);
   });
