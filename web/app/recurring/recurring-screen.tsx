@@ -304,7 +304,10 @@ export function RecurringScreen({ currencies, request }: Props) {
             : "Not recorded"}
           {row.paymentChannelName && <span>{row.paymentChannelName}</span>}
         </td>
-        <td><StatusLabel tone={statusTone(row)}>{STATUS_TEXT[row.status] ?? row.status}</StatusLabel></td>
+        <td><div className="recurring-status-stack">
+          <StatusLabel tone={statusTone(row)}>{STATUS_TEXT[row.status] ?? row.status}</StatusLabel>
+          {row.needsName && <StatusLabel tone="attention">Needs a name</StatusLabel>}
+        </div></td>
         <td className="recurring-record-date">
           {row.status === "ended"
             ? `ended ${row.lastPeriodEndedOn ?? row.lastSeenOn}${row.lastEndReason ? ` (${END_REASON_TEXT[row.lastEndReason] ?? row.lastEndReason})` : ""}`

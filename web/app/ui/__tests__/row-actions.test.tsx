@@ -6,7 +6,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { RowActions } from "@/app/ui/row-actions";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe("RowActions", () => {
   it("keeps named actions closed until the trigger is activated", () => {
@@ -38,17 +42,31 @@ describe("RowActions", () => {
     // An icon-only trigger still carries the full accessible name.
     const trigger = screen.getByRole("button", { name: "Actions for Synthetic record" });
     expect(trigger.textContent).toBe("⋯");
+    vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue({
+      bottom: 406,
+      height: 26,
+      left: 720,
+      right: 746,
+      top: 380,
+      width: 26,
+      x: 720,
+      y: 380,
+      toJSON: () => ({}),
+    });
+    vi.stubGlobal("innerHeight", 640);
     fireEvent.click(trigger);
-    // Absolute, so opening one row's actions cannot push the rows below it down.
     const panel = screen.getByRole("region", { name: "Actions for Synthetic record" });
     expect(panel.closest(".row-actions")?.getAttribute("data-floating")).toBe("true");
     // Anchored to the trigger rather than laid out in the row, so it cannot push rows down.
     expect(panel.getAttribute("style")).toMatch(/top:/);
+    // The available space becomes a scrollable ceiling, so an editor opened inside the menu
+    // remains reachable even when it grows after the initial placement decision.
+    expect(panel.getAttribute("style")).toContain("max-height: 222px");
 
     const css = readFileSync(`${process.cwd()}/app/globals.css`, "utf8");
-    // Fixed, so a `.data-table-region`'s own overflow cannot clip it; and scoped, so the
-    // subscription and recurring records keep their inline disclosure.
+    // Fixed, so a `.data-table-region`'s own overflow cannot clip it.
     expect(css).toMatch(/\.row-actions\[data-floating="true"\] \.row-actions-content \{[^}]*position: fixed/);
+    expect(css).toMatch(/\.row-actions\[data-floating="true"\] \.row-actions-content \{[^}]*overflow-y: auto/);
     expect(css).not.toMatch(/(?:^|\n)\.row-actions-content \{[^}]*position: absolute/);
   });
 

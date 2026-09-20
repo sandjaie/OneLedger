@@ -3163,6 +3163,8 @@ body {
   border-radius: 8px;
   background: #fff;
   box-shadow: 0 16px 40px rgb(20 32 50 / 16%);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   text-align: left;
   transform: translateX(-100%);
 }
@@ -3334,6 +3336,7 @@ body {
 :is(.subscription-lifecycle-table, .recurring-lifecycle-table) :is(th, td) { vertical-align: top; }
 :is(.subscription-source, .recurring-payment-source) { min-width: 150px; white-space: normal !important; }
 :is(.subscription-source, .recurring-payment-source) > span { display: block; margin-top: 3px; color: var(--console-muted); font-size: 11px; }
+.recurring-status-stack { display: grid; gap: 4px; }
 :is(.subscription-record-date, .recurring-record-date) { min-width: 142px; white-space: normal !important; }
 :is(.subscription-record-amount, .recurring-record-amount) { min-width: 148px; font-size: 12px !important; }
 .subscription-by-card { display: grid; gap: 10px; margin-top: 10px; }
