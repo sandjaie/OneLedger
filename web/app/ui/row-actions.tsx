@@ -19,8 +19,8 @@ type RowActionsProps = {
    * `auto` as well, so an absolutely positioned panel would be clipped by the region and would
    * grow it a surprise vertical scrollbar. Anchoring the panel with `position: fixed` takes it
    * out of every ancestor's clip box; it is closed on scroll and resize so it can never sit
-   * away from the trigger it belongs to. Screens that still use the inline disclosure — the
-   * subscription and recurring records — are unaffected. */
+   * away from the trigger it belongs to. Callers outside console tables can still choose the
+   * inline disclosure when expanding the layout is intentional. */
   floating?: boolean;
 };
 

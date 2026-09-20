@@ -178,8 +178,6 @@ describe("recurring screen", () => {
     });
 
     render(<RecurringScreen currencies={CURRENCIES} request={request as Request} />);
-    await screen.findByRole("button", { name: "Review Synthetic streaming service" });
-    fireEvent.click(screen.getByRole("button", { name: "Review Synthetic streaming service" }));
     expect(await screen.findByText(/Everyday card \(•••• 4242\)/)).toBeTruthy();
     expect(screen.getByText("App store")).toBeTruthy();
   });

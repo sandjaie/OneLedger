@@ -3288,3 +3288,150 @@ body {
   .transactions-screen .transaction-filter-main { grid-template-columns: minmax(0, 1fr); }
   .transactions-screen .console-page-actions > [data-slot="button"] { width: 100%; }
 }
+
+/* Phase 4.8 Task 5 — subscriptions and recurring payments use the activity-console family:
+   one evidenced lead, exact server totals, lifecycle tables, and contextual actions. */
+.workspace-content:is(.subscriptions-screen, .recurring-screen, .subscription-detail-screen) {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  max-width: none;
+  min-width: 0;
+}
+.workspace-content:is(.subscriptions-screen, .recurring-screen, .subscription-detail-screen) > * { min-width: 0; }
+:is(.subscriptions-screen, .recurring-screen, .subscription-detail-screen) .console-page-header { margin-bottom: 0; }
+:is(.subscriptions-screen, .recurring-screen) .experience-disclosure { margin: -10px 0 0; }
+:is(.subscriptions-screen, .recurring-screen, .subscription-detail-screen) .metric-strip { padding-block: 14px; }
+
+.console-lead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 14px 16px;
+  border: 1px solid var(--console-line);
+  border-left: 3px solid var(--console-blue);
+  border-radius: 7px;
+  background: var(--console-soft);
+}
+.console-lead > div:first-child { display: grid; gap: 3px; min-width: 0; }
+.console-lead > div:first-child > span { color: var(--console-muted); font-size: 11px; }
+.console-lead > div:first-child > :is(a, strong, time) { overflow-wrap: anywhere; font-size: 14px; font-weight: 650; }
+.console-lead > div:first-child > a { color: var(--console-blue); text-decoration: none; }
+.console-lead-facts { display: grid; gap: 3px; justify-items: end; min-width: min(100%, 240px); text-align: right; }
+.console-lead-facts strong { font-size: 16px; font-variant-numeric: tabular-nums; }
+.console-lead-facts span { color: var(--console-muted); font-size: 11px; }
+
+:is(.subscriptions-screen, .recurring-screen) > .data-toolbar { margin: 0; }
+:is(.subscriptions-screen, .recurring-screen) .section-nav { margin: 0; }
+:is(.subscription-view, .recurring-view) { display: grid; gap: 12px; }
+:is(.subscription-view, .recurring-view) > .console-section-head { margin: 0; }
+:is(.subscription-view, .recurring-view) > p { margin: 0; }
+:is(.subscriptions-screen, .recurring-screen) .data-table-region { border-bottom: 1px solid var(--console-line); }
+.subscription-lifecycle-table,
+.recurring-lifecycle-table { min-width: 960px; }
+.subscription-account-table { min-width: 620px; }
+:is(.subscription-lifecycle-table, .recurring-lifecycle-table) :is(th, td) { vertical-align: top; }
+:is(.subscription-source, .recurring-payment-source) { min-width: 150px; white-space: normal !important; }
+:is(.subscription-source, .recurring-payment-source) > span { display: block; margin-top: 3px; color: var(--console-muted); font-size: 11px; }
+:is(.subscription-record-date, .recurring-record-date) { min-width: 142px; white-space: normal !important; }
+:is(.subscription-record-amount, .recurring-record-amount) { min-width: 148px; font-size: 12px !important; }
+.subscription-by-card { display: grid; gap: 10px; margin-top: 10px; }
+.subscription-by-card h3 { margin: 0; font-family: inherit; font-size: 16px; font-weight: 650; }
+
+.recurring-record-review { margin-top: 3px; }
+.recurring-record-review [data-slot="collapsible-trigger"] {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--console-blue);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+}
+.recurring-record-review [data-slot="collapsible-trigger"]:focus-visible { outline: 2px solid var(--console-blue); outline-offset: 2px; }
+.recurring-record-review [data-slot="collapsible-content"] { padding: 8px 0 0; }
+.recurring-record-review dl { grid-template-columns: minmax(130px, 1fr); gap: 7px; }
+.recurring-record-review dt { color: var(--console-muted); font-size: 10px; }
+.recurring-record-review dd { color: var(--console-ink); font-size: 11px; }
+
+:is(.subscriptions-screen, .recurring-screen, .subscription-detail-screen)
+  .row-actions[data-floating="true"] .plans-settlement-actions {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+}
+:is(.subscriptions-screen, .recurring-screen, .subscription-detail-screen)
+  .row-actions[data-floating="true"] .plans-settlement-actions > :is([data-slot="button"], [data-slot="native-select"]) {
+  width: 100%;
+}
+:is(.subscriptions-screen, .recurring-screen, .subscription-detail-screen)
+  .row-actions[data-floating="true"] .plans-settlement-actions > [data-slot="button"] { justify-content: flex-start; }
+:is(.subscriptions-screen, .recurring-screen, .subscription-detail-screen)
+  .row-actions[data-floating="true"] .recurring-dismiss-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  width: 260px;
+  padding: 8px 4px 4px;
+  border-top: 1px solid var(--console-line);
+}
+:is(.subscriptions-screen, .recurring-screen, .subscription-detail-screen)
+  .row-actions[data-floating="true"] .recurring-dismiss-form > label { grid-column: 1 / -1; }
+
+.subscription-detail-status { margin: -10px 0 0; }
+.subscription-context-facts { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.subscription-detail-screen > .console-section {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.subscription-detail-screen .console-section { display: grid; gap: 11px; }
+.subscription-period-table { min-width: 900px; }
+.subscription-period-table :is(th, td) { vertical-align: top; }
+.subscription-period-table td:last-child { min-width: 260px; white-space: normal; }
+.subscription-charge-links { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.subscription-charge-links a { color: var(--console-blue); font-size: 11px; font-weight: 600; text-decoration: none; }
+.subscription-price-timeline {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  border-block: 1px solid var(--console-line);
+  list-style: none;
+}
+.subscription-price-timeline > li {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 12px 16px;
+  border: 0;
+  border-left: 1px solid var(--console-line);
+}
+.subscription-price-timeline > li:first-child { padding-left: 4px; border-left: 0; }
+.subscription-price-timeline > li::before { content: none; }
+.subscription-price-timeline span { color: var(--console-muted); font-size: 11px; }
+.subscription-price-timeline strong { font-size: 13px; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 1024px) {
+  .subscription-context-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 14px; }
+  .subscription-context-facts > div:nth-child(odd) { padding-left: 0; border-left: 0; }
+}
+
+@media (max-width: 588px) {
+  .console-lead { align-items: flex-start; flex-direction: column; }
+  .console-lead-facts { justify-items: start; min-width: 0; text-align: left; }
+  :is(.subscriptions-screen, .recurring-screen) > .data-toolbar .data-toolbar-controls { width: 100%; }
+  :is(.subscriptions-screen, .recurring-screen) .section-nav { width: 100%; }
+  :is(.subscriptions-screen, .recurring-screen) .section-nav > [data-slot="button"] { flex: 1 1 auto; }
+  .subscription-context-facts { grid-template-columns: minmax(0, 1fr); row-gap: 0; }
+  .subscription-context-facts > div,
+  .subscription-context-facts > div:nth-child(odd) { padding: 10px 0; border-top: 1px solid var(--console-line); border-left: 0; }
+  .subscription-context-facts > div:first-child { padding-top: 0; border-top: 0; }
+  .subscription-price-timeline { grid-template-columns: minmax(0, 1fr); }
+  .subscription-price-timeline > li,
+  .subscription-price-timeline > li:first-child { padding: 10px 0; border-top: 1px solid var(--console-line); border-left: 0; }
+  .subscription-price-timeline > li:first-child { border-top: 0; }
+}

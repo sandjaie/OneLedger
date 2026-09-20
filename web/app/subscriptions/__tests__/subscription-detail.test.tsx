@@ -150,14 +150,17 @@ describe("subscription detail", () => {
     );
     await screen.findByRole("heading", { name: "Synthetic streaming service" });
 
-    const timeline = screen.getByText("Billing periods").nextElementSibling as HTMLElement;
-    const periods = within(timeline).getAllByRole("listitem");
-    // Includes each period's nested charge <li>s too; only a lower bound is asserted below.
-    expect(within(timeline).getByText(/2026-01-03 – 2026-03-03 · cancelled/)).toBeTruthy();
-    expect(within(timeline).getByText(/2 charges · \$30\.0000/)).toBeTruthy();
-    expect(within(timeline).getByText(/2026-06-01 – now · active, resumed/)).toBeTruthy();
-    expect(within(timeline).getByText(/3 charges · \$60\.0000/)).toBeTruthy();
-    expect(periods.length).toBeGreaterThanOrEqual(2);
+    const timeline = screen.getByRole("region", { name: "Billing period timeline" });
+    const periods = within(timeline).getAllByRole("row").slice(1);
+    expect(periods).toHaveLength(2);
+    expect(within(periods[0]).getByText("2026-01-03 – 2026-03-03")).toBeTruthy();
+    expect(within(periods[0]).getByText("cancelled")).toBeTruthy();
+    expect(within(periods[0]).getByText("2 charges")).toBeTruthy();
+    expect(within(periods[0]).getByText("$30.0000")).toBeTruthy();
+    expect(within(periods[1]).getByText("2026-06-01 – now")).toBeTruthy();
+    expect(within(periods[1]).getByText("active, resumed")).toBeTruthy();
+    expect(within(periods[1]).getByText("3 charges")).toBeTruthy();
+    expect(within(periods[1]).getByText("$60.0000")).toBeTruthy();
 
     // Charges are grouped under their own period, each linking to the ledger.
     const firstPeriodLink = within(timeline).getByRole("link", { name: /2026-01-03 · \$15\.0000 · Everyday card/ });
@@ -181,10 +184,12 @@ describe("subscription detail", () => {
       />,
     );
     await screen.findByRole("heading", { name: "Synthetic streaming service" });
-    const history = screen.getByText("Price history").nextElementSibling as HTMLElement;
-    expect(within(history).getByText(/2026-01-03 · \$15\.0000/)).toBeTruthy();
-    expect(within(history).getByText(/2026-08-03 · \$18\.0000/)).toBeTruthy();
-    expect(history.classList.contains("subscription-price-timeline")).toBe(true);
+    const historyRegion = screen.getByRole("region", { name: "Price history" });
+    const history = historyRegion.querySelector(".subscription-price-timeline") as HTMLElement;
+    expect(within(history).getByText("2026-01-03")).toBeTruthy();
+    expect(within(history).getByText("$15.0000")).toBeTruthy();
+    expect(within(history).getByText("2026-08-03")).toBeTruthy();
+    expect(within(history).getByText("$18.0000")).toBeTruthy();
   });
 
   it("asks before cancelling and posts the cancel", async () => {
@@ -205,6 +210,7 @@ describe("subscription detail", () => {
     );
     await screen.findByRole("heading", { name: "Synthetic streaming service" });
 
+    fireEvent.click(screen.getByRole("button", { name: "Manage Synthetic streaming service" }));
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(screen.getByRole("alertdialog")).toBeTruthy();
     expect(screen.getByText("Cancel Synthetic streaming service? This closes its current billing period.")).toBeTruthy();
@@ -245,6 +251,7 @@ describe("subscription detail", () => {
     );
     await screen.findByRole("heading", { name: "Synthetic streaming service" });
 
+    fireEvent.click(screen.getByRole("button", { name: "Manage Synthetic streaming service" }));
     fireEvent.change(screen.getByLabelText("Payment channel"), { target: { value: "chan-1" } });
     await waitFor(() =>
       expect(request).toHaveBeenCalledWith(
@@ -282,8 +289,9 @@ describe("subscription detail", () => {
       request={fixedRequest(detail) as Request} seriesId="series-1" />);
 
     await screen.findByRole("heading", { name: "Synthetic streaming service" });
-    expect(screen.getByText("Ended")).toBeTruthy();
+    expect(screen.getAllByText("Ended").length).toBeGreaterThan(0);
     expect(screen.queryByRole("combobox", { name: "Status" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Manage Synthetic streaming service" }));
     expect(screen.getByRole("button", { name: "Resume" })).toBeTruthy();
   });
 });
