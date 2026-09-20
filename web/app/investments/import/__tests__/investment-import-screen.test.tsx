@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { InvestmentImportScreen } from "@/app/investments/import/investment-import-screen";
+import { ApiError } from "@/lib/api/client";
 import type {
   AccountRow,
   InvestmentCommitResponse,
@@ -199,6 +200,21 @@ async function runToStaged(request: ReturnType<typeof vi.fn>) {
 afterEach(cleanup);
 
 describe("investment statement import", () => {
+  it("keeps a selected statement at resolution when its check is refused", async () => {
+    const request = vi.fn().mockRejectedValue(new ApiError(422, "This statement needs attention."));
+    render(<InvestmentImportScreen accounts={[account]} request={request as never} />);
+
+    fireEvent.change(screen.getByLabelText("Statement file"), { target: { files: [pdf()] } });
+    fireEvent.click(screen.getByRole("button", { name: "Check statement" }));
+
+    await screen.findByRole("alert");
+    expect(
+      screen
+        .getByRole("list", { name: "Import steps" })
+        .querySelector('[aria-current="step"]')?.textContent,
+    ).toContain("Identify / resolve");
+  });
+
   it("stages an uploaded statement and commits its ready group", async () => {
     const request = vi
       .fn()

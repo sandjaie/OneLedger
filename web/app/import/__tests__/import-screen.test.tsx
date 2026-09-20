@@ -237,7 +237,7 @@ describe("choosing files", () => {
       "4ReviewDecide what is ready",
       "5CommitWrite confirmed records",
     ]);
-    expect(steps.querySelector('[aria-current="step"]')).toBeNull();
+    expect(steps.querySelector('[aria-current="step"]')?.textContent).toContain("Upload");
     expect(screen.getByLabelText("Upload statement files").className).toContain(
       "statement-import-dropzone",
     );
@@ -340,7 +340,7 @@ describe("per-file outcomes", () => {
       within(april)
         .getByRole("list", { name: "april.pdf import progress" })
         .querySelector('[aria-current="step"]')?.textContent,
-    ).toContain("Upload");
+    ).toContain("Identify / resolve");
     expect(request).toHaveBeenCalledTimes(2);
   });
 

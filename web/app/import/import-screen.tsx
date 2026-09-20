@@ -220,14 +220,14 @@ function leadsProposal(item: Candidate, candidates: Array<Candidate>) {
 function candidateStage(item: Candidate): ImportStage {
   if (item.state === "staged") return 4;
   if (item.parsed?.identityResolution.status === "matched") return 3;
-  if (item.state === "checking" || item.parsed) return 2;
+  if (item.state === "checking" || item.parsed || item.problem) return 2;
   return 1;
 }
 
 function candidateCompleteThrough(item: Candidate): 0 | ImportStage {
   if (item.state === "staged") return 3;
   if (item.parsed?.identityResolution.status === "matched") return 2;
-  if (item.parsed) return 1;
+  if (item.parsed || item.problem) return 1;
   return 0;
 }
 
@@ -456,7 +456,7 @@ export function ImportScreen({ accounts, currencies, request }: Props) {
         <p>Check first. Nothing enters the ledger until you review and commit it.</p>
       </header>
 
-      <ImportStageJourney />
+      <ImportStageJourney current={1} />
 
       <div
         aria-label="Upload statement files"

@@ -153,8 +153,8 @@ export function InvestmentImportScreen({ accounts, importId, request }: Props) {
   const previewNeedsResolution = preview
     ? !everyTargetResolved(preview.groups, resolutions)
     : false;
-  const uploadStage: ImportStage = !preview ? 1 : previewNeedsResolution ? 2 : 3;
-  const uploadCompleteThrough = !preview ? 0 : previewNeedsResolution ? 1 : 2;
+  const uploadStage: ImportStage = !preview ? problem ? 2 : 1 : previewNeedsResolution ? 2 : 3;
+  const uploadCompleteThrough = !preview ? problem ? 1 : 0 : previewNeedsResolution ? 1 : 2;
 
   // Resuming: `/investments/import/{importId}` loads the staged state directly and skips upload.
   useEffect(() => {
