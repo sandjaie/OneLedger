@@ -2888,6 +2888,7 @@ export type DashboardResponse = {
     cardsDue: Array<CardDue>;
     yearToDate: YearToDate;
     upcomingCommitments: UpcomingCommitmentsSummary;
+    positionComposition: PositionComposition;
 };
 
 /**
@@ -7160,6 +7161,72 @@ export type PortfolioSummary = {
      */
     staleCount: number;
     priceStatus: PriceStatus;
+};
+
+/**
+ * PositionComposition
+ */
+export type PositionComposition = {
+    /**
+     * Rows
+     */
+    rows: Array<PositionCompositionRow>;
+    /**
+     * Missing
+     */
+    missing: Array<PositionCompositionMissing>;
+};
+
+/**
+ * PositionCompositionMissing
+ */
+export type PositionCompositionMissing = {
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Currency
+     */
+    currency: string;
+};
+
+/**
+ * PositionCompositionRow
+ */
+export type PositionCompositionRow = {
+    /**
+     * Key
+     */
+    key: 'cash' | 'investments' | 'property' | 'retirement' | 'other' | 'liabilities';
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Valuebase
+     */
+    valueBase: string | null;
+    /**
+     * Valuesecondary
+     */
+    valueSecondary: string | null;
+    /**
+     * Sharepercentbase
+     */
+    sharePercentBase: string | null;
+    /**
+     * Sharepercentsecondary
+     */
+    sharePercentSecondary: string | null;
+    /**
+     * Chartcoordinatebase
+     */
+    chartCoordinateBase: number | null;
+    /**
+     * Chartcoordinatesecondary
+     */
+    chartCoordinateSecondary: number | null;
 };
 
 /**

@@ -81,6 +81,11 @@ function outOfBand(path: string): Promise<unknown> | undefined {
   if (path === "/transactions?limit=5&offset=0") {
     return Promise.resolve({ transactions: [], total: 0 });
   }
+  // Net-position history (Phase 4.8 Task 2): Overview plots the stored month ends beside the
+  // dashboard; every test here is about the rest of the screen, so it sees none stored yet.
+  if (path === "/wealth-history") {
+    return Promise.resolve({ baseCurrency: "XIN", secondaryCurrency: "XAE", months: [] });
+  }
   // Goals (Phase 3.3 Task 1) fetches alongside the forecast and commitments on Plans; every test
   // here is about the rest of the screen, so it sees no goals or reservable accounts.
   if (path === "/goals?includeClosed=true") {
@@ -255,6 +260,31 @@ const dashboard: DashboardResponse = {
     next: null,
     items: [],
   },
+  positionComposition: {
+    rows: [
+      {
+        key: "cash",
+        label: "Cash and equivalents",
+        valueBase: "2000000.0000",
+        valueSecondary: "90000.0000",
+        sharePercentBase: "72.3271",
+        sharePercentSecondary: "72.3271",
+        chartCoordinateBase: 7233,
+        chartCoordinateSecondary: 7233,
+      },
+      {
+        key: "liabilities",
+        label: "Liabilities",
+        valueBase: "-765432.1100",
+        valueSecondary: "-34444.4500",
+        sharePercentBase: "27.6729",
+        sharePercentSecondary: "27.6729",
+        chartCoordinateBase: 2767,
+        chartCoordinateSecondary: 2767,
+      },
+    ],
+    missing: [],
+  },
 };
 
 describe("authenticated workspace", () => {
@@ -281,7 +311,7 @@ describe("authenticated workspace", () => {
     pending.resolve(household);
     expect(await screen.findByRole("group", { name: "Reporting currency" })).toBeTruthy();
     expect(screen.getByRole("combobox", { name: "Search OneLedger" })).toBeTruthy();
-    expect(await screen.findByText("₹12,34,567.89")).toBeTruthy();
+    expect(await screen.findAllByText("₹12,34,567.89")).toBeTruthy();
     expect(screen.getByRole("navigation", { name: "Workspace" })).toBeTruthy();
     expect(screen.getByRole("navigation", { name: "Workspace" }).closest("[data-slot=sidebar]")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Overview" }).getAttribute("aria-current")).toBe("page");
@@ -358,18 +388,18 @@ describe("authenticated workspace", () => {
     expect(await screen.findByRole("heading", { name: "OneLedger is unavailable" })).toBeTruthy();
     expect(screen.queryByRole("group", { name: "Reporting currency" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-    expect(await screen.findByText("₹12,34,567.89")).toBeTruthy();
+    expect(await screen.findAllByText("₹12,34,567.89")).toBeTruthy();
   });
 
   it("keeps the owner view on transient logout failure and clears it after retry succeeds", async () => {
     const navigate = vi.fn();
     const request = requestThat(household, catalogue, dashboard, new TypeError("offline"), undefined);
     render(<Workspace request={request} navigate={navigate} />);
-    await screen.findByText("₹12,34,567.89");
+    await screen.findAllByText("₹12,34,567.89");
 
     fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
     expect((await screen.findByRole("alert")).textContent).toContain("could not confirm");
-    expect(screen.getByText("₹12,34,567.89")).toBeTruthy();
+    expect(screen.getAllByText("₹12,34,567.89").length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole("button", { name: "Retry sign out" }));
     await waitFor(() => expect(navigate).toHaveBeenCalledWith("/login"));
@@ -384,7 +414,7 @@ describe("authenticated workspace", () => {
     const navigate = vi.fn();
     const request = requestThat(household, catalogue, dashboard, new ApiError(status, "synthetic"));
     render(<Workspace request={request} navigate={navigate} />);
-    await screen.findByText("₹12,34,567.89");
+    await screen.findAllByText("₹12,34,567.89");
 
     fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
     await waitFor(() => expect(navigate).toHaveBeenCalledWith(destination));
@@ -395,24 +425,24 @@ describe("authenticated workspace", () => {
   it("persists the configured toggle, falls back from obsolete choices, and tolerates storage errors", async () => {
     localStorage.setItem("oneledger.reportingCurrency", "obsolete");
     const first = render(<Workspace request={requestThat(household, catalogue, dashboard)} navigate={vi.fn()} />);
-    expect(await screen.findByText("₹12,34,567.89")).toBeTruthy();
+    expect(await screen.findAllByText("₹12,34,567.89")).toBeTruthy();
 
     const secondary = screen.getByRole("button", { name: "XAE" });
     expect(secondary.getAttribute("aria-pressed")).toBe("false");
     fireEvent.click(secondary);
-    expect(within(screen.getByRole("region", { name: "This month" })).getByText("AED 22,000.00")).toBeTruthy();
+    expect(within(screen.getByRole("region", { name: "Position composition" })).getByText("AED 90,000.00")).toBeTruthy();
     expect(localStorage.getItem("oneledger.reportingCurrency")).toBe("XAE");
 
     first.unmount();
     render(<Workspace request={requestThat(household, catalogue, dashboard)} navigate={vi.fn()} />);
-    expect(within(await screen.findByRole("region", { name: "This month" })).getByText("AED 22,000.00")).toBeTruthy();
+    expect(within(await screen.findByRole("region", { name: "Position composition" })).getByText("AED 90,000.00")).toBeTruthy();
 
     cleanup();
     vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
       throw new Error("blocked");
     });
     render(<Workspace request={requestThat(household, catalogue, dashboard)} navigate={vi.fn()} />);
-    expect(await screen.findByText("₹12,34,567.89")).toBeTruthy();
+    expect(await screen.findAllByText("₹12,34,567.89")).toBeTruthy();
   });
 
   it("opens Settings on the data-quality report", async () => {
@@ -1141,13 +1171,14 @@ describe("authenticated workspace", () => {
   it("loads the currency catalogue, the dashboard and needs attention on overview, and nothing else", async () => {
     const request = requestThat(household, catalogue, dashboard);
     render(<Workspace request={request} navigate={vi.fn()} />);
-    await screen.findByText("₹12,34,567.89");
+    await screen.findAllByText("₹12,34,567.89");
     expect(vi.mocked(request).mock.calls.map((call) => call[0])).toEqual([
       "/household",
       "/currencies",
       "/dashboard",
       "/actions",
       "/transactions?limit=5&offset=0",
+      "/wealth-history",
     ]);
     expect(screen.queryByText(/Phase 0/)).toBeNull();
   });

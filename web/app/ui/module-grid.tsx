@@ -5,11 +5,13 @@ export function ModuleGrid({ children }: { children: ReactNode }) {
 }
 
 export function Module({ title, meta, children, footer }: { title: string; meta?: ReactNode; children: ReactNode; footer?: ReactNode }) {
+  // Named so the module is a landmark a keyboard or screen-reader user can reach directly,
+  // the way `AttentionRow` names its own; the visible heading stays the module's title.
   return (
-    <section className="console-module">
-      <header><h2>{title}</h2>{meta && <span>{meta}</span>}</header>
+    <section aria-label={title} className="console-module">
+      <div className="console-module-head"><h2>{title}</h2>{meta && <span>{meta}</span>}</div>
       <div className="console-module-content">{children}</div>
-      {footer && <footer>{footer}</footer>}
+      {footer && <div className="console-module-foot">{footer}</div>}
     </section>
   );
 }
