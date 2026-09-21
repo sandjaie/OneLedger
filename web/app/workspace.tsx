@@ -20,6 +20,7 @@ import { ReviewScreen } from "@/app/import/review-screen";
 import { ClassificationReviewScreen } from "@/app/review/classification-review-screen";
 import { PlansScreen } from "@/app/plans/plans-screen";
 import { RecurringScreen } from "@/app/recurring/recurring-screen";
+import { RemittancesScreen } from "@/app/remittances/remittances-screen";
 import { PayslipsScreen } from "@/app/salary/payslips-screen";
 import { SpendingScreen } from "@/app/spending/spending-screen";
 import { SubscriptionDetail } from "@/app/subscriptions/subscription-detail";
@@ -42,7 +43,7 @@ import type {
 const PREFERENCE_KEY = "oneledger.reportingCurrency";
 
 type Props = {
-  section?: "overview" | "settings" | "accounts" | "transactions" | "spending" | "subscriptions" | "subscriptions-detail" | "recurring" | "documents" | "investments" | "investments-entry" | "investments-holding" | "investments-import" | "import" | "review" | "classification-review" | "salary" | "plans" | "coverage" | "wealth";
+  section?: "overview" | "settings" | "accounts" | "transactions" | "spending" | "subscriptions" | "subscriptions-detail" | "recurring" | "documents" | "investments" | "investments-entry" | "investments-holding" | "investments-import" | "import" | "review" | "classification-review" | "salary" | "remittances" | "plans" | "coverage" | "wealth";
   // The batch under review. A path parameter rather than a section of its own, because review
   // is where an import ends up rather than a sibling destination.
   batchId?: string;
@@ -92,6 +93,7 @@ function sectionFromPath() {
   if (window.location.pathname === "/import") return "import";
   if (window.location.pathname === "/review") return "classification-review";
   if (window.location.pathname === "/salary") return "salary";
+  if (window.location.pathname === "/remittances") return "remittances";
   if (window.location.pathname === "/plans") return "plans";
   if (window.location.pathname === "/coverage") return "coverage";
   if (window.location.pathname === "/wealth") return "wealth";
@@ -303,6 +305,13 @@ export function Workspace({
           if (!current) return;
           setCurrencies(catalogue);
           setCategories(taxonomy);
+        }
+        if (activeSection === "remittances") {
+          // Currency rows only: the screen formats the service's own strings and fetches the
+          // analysis itself, as the salary and investment analyses do.
+          const catalogue = await request<Array<CurrencyRow>>("/currencies");
+          if (!current) return;
+          setCurrencies(catalogue);
         }
         if (activeSection === "plans") {
           const nextInventory = await request<AccountsResponse>("/accounts");
@@ -558,6 +567,10 @@ export function Workspace({
               categories={categories}
               request={wrappedRequest}
             />
+          )}
+
+          {activeSection === "remittances" && currencies && (
+            <RemittancesScreen currencies={currencies} request={wrappedRequest} />
           )}
 
           {activeSection === "plans" && inventory && currencies && household && (

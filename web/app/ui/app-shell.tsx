@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { useState } from "react";
 import Link from "next/link";
 import {
-  ArrowLeftRightIcon, CalendarDaysIcon, CandlestickChartIcon, ChartPieIcon,
+  ArrowLeftRightIcon, BanknoteIcon, CalendarDaysIcon, CandlestickChartIcon, ChartPieIcon,
   ClipboardListIcon, FilesIcon, LandmarkIcon, LayoutDashboardIcon, LineChartIcon,
   MenuIcon, Repeat2Icon, SettingsIcon, ShieldCheckIcon, TagsIcon, TrendingUpIcon,
   UploadIcon, WalletCardsIcon,
@@ -33,6 +33,7 @@ const NAV_GROUPS = [
   { label: "Build & plan", links: [
     { label: "Investments", href: "/investments", sections: ["investments", "investments-entry", "investments-holding"], icon: TrendingUpIcon },
     { label: "Salary", href: "/salary", sections: ["salary"], icon: WalletCardsIcon },
+    { label: "Remittances", href: "/remittances", sections: ["remittances"], icon: BanknoteIcon },
     { label: "Plans", href: "/plans", sections: ["plans"], icon: ClipboardListIcon },
     { label: "Wealth", href: "/wealth", sections: ["wealth"], icon: LineChartIcon },
   ] },

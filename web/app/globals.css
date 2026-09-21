@@ -1995,7 +1995,7 @@ body { background: var(--paper); }
   font-size: 0.61rem; font-weight: 500; letter-spacing: 0.12em;
 }
 :is(.subscriptions-screen, .recurring-screen, .spending-screen, .salary-screen, .plans-screen,
-  .coverage-screen, .wealth-screen, .settings-screen) > .lede,
+  .coverage-screen, .wealth-screen, .settings-screen, .remittances-screen) > .lede,
 :is(.salary-screen, .plans-screen, .coverage-screen, .wealth-screen) > header > p:last-of-type {
   max-width: 720px; margin: 10px 0 0; color: var(--muted);
   font-size: 0.84rem; line-height: 1.55;
@@ -3028,7 +3028,26 @@ body {
 
 .console-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .console-section-head h2 { margin: 0; font-size: 16px; font-weight: 650; }
+.console-section-head h3 { margin: 0; font-size: 13px; font-weight: 650; }
 .console-section-head > span { color: var(--console-muted); font-size: 12px; }
+
+/* Remittances (Phase 4.4). The provider table carries eight columns of money, so it keeps its
+   natural width and scrolls inside `.data-table-region` rather than crushing on a phone. */
+.remittance-year { margin-top: 18px; }
+.remittance-providers-table { min-width: max-content; }
+.remittance-providers-table tfoot th, .remittance-providers-table tfoot td {
+  border-top: 1px solid var(--rule); font-weight: 650;
+}
+.remittance-providers-table small { display: block; color: var(--console-muted); font-size: 11px; }
+/* Unlabelled money is inside the corridor's totals but outside the comparison, and reads that
+   way: money with no recorded channel cannot be attributed a cheaper one. */
+.remittance-unattributed-row { color: var(--console-muted); }
+.remittance-correction { margin-top: 6px; }
+.remittance-correction-form {
+  display: grid; gap: 8px; max-width: 420px; margin-top: 6px; padding: 10px;
+  border: 1px solid var(--rule); border-radius: var(--radius); background: var(--card);
+}
+.remittance-correction-form .lede { margin: 0; color: var(--console-muted); font-size: 11px; }
 
 .console-entity { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
 .console-entity > div { display: grid; gap: 2px; min-width: 0; }
