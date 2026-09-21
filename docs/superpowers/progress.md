@@ -13,9 +13,9 @@ Updated: 21 September 2026.
 | Item | Current state | Evidence |
 | --- | --- | --- |
 | Current outcome | **Phase 4.4 — FX and remittance analysis** | [Phase 4.4 specification](specs/2026-09-21-phase-4-4-fx-remittance-analysis.md) |
-| Outcome state | **Phase 4.4 Task 1 is implemented; Task 2 is next.** Phase 4.8 remains owner-accepted and implementation-complete, and Phase 4.3 remains implementation-complete with owner acceptance open | [Phase 4.4 plan](plans/2026-09-21-phase-4-4-fx-remittance-analysis.md) |
-| Next product action | Implement Phase 4.4 Task 2 — the transfer-panel correction and the Remittances screen; owner acceptance of Phases 4.1–4.3 on real statements, payslips and holdings | [Phase 4.4 plan](plans/2026-09-21-phase-4-4-fx-remittance-analysis.md) |
-| Current implementation task | Phase 4.4 Task 2 next, after Task 1 merges | [Phase 4.4 plan](plans/2026-09-21-phase-4-4-fx-remittance-analysis.md#phase-44-task-2--corrections-and-analysis-on-screen) |
+| Outcome state | **Phase 4.4 implementation is complete; owner acceptance is open.** Task 1 merged through [PR #281](https://github.com/sandjaie/OneLedger/pull/281) and Task 2 delivers the correction control and the Remittances screen. Phase 4.8 remains owner-accepted and implementation-complete, and Phases 4.1–4.3 remain implementation-complete with owner acceptance open | [Phase 4.4 plan](plans/2026-09-21-phase-4-4-fx-remittance-analysis.md) |
+| Next product action | Owner acceptance of Phase 4.4 on real remittances, and of Phases 4.1–4.3 on real statements, payslips and holdings; then the next owner-selected roadmap outcome | [Phase 4.4 plan](plans/2026-09-21-phase-4-4-fx-remittance-analysis.md) |
+| Current implementation task | **None — Phase 4.4 Task 2 is implemented and no further Phase 4.4 task is planned** | [Phase 4.4 plan](plans/2026-09-21-phase-4-4-fx-remittance-analysis.md#phase-44-task-2--corrections-and-analysis-on-screen) |
 
 ## Canonical phase status
 
@@ -57,9 +57,9 @@ Updated: 21 September 2026.
 | 4.3 — investment analysis | **Implementation complete; owner acceptance open** — [PR #245](https://github.com/sandjaie/OneLedger/pull/245), [PR #246](https://github.com/sandjaie/OneLedger/pull/246), [PR #247](https://github.com/sandjaie/OneLedger/pull/247) | [Phase 4.3 specification](specs/2026-09-16-phase-4-3-investment-analysis.md) · [Phase 4.3 plan](plans/2026-09-16-phase-4-3-investment-analysis.md) |
 | 4.3 Task 1 — investment analysis API | **Delivered** — [PR #246](https://github.com/sandjaie/OneLedger/pull/246) | [plan](plans/2026-09-16-phase-4-3-investment-analysis.md) |
 | 4.3 Task 2 — investment analysis on the Investments screen | **Delivered** — [PR #247](https://github.com/sandjaie/OneLedger/pull/247) | [plan](plans/2026-09-16-phase-4-3-investment-analysis.md) |
-| 4.4 — FX and remittance analysis | **Specified** | [Phase 4.4 specification](specs/2026-09-21-phase-4-4-fx-remittance-analysis.md) · [Phase 4.4 plan](plans/2026-09-21-phase-4-4-fx-remittance-analysis.md) |
+| 4.4 — FX and remittance analysis | **Implementation complete; owner acceptance open** — Task 1 merged through [PR #281](https://github.com/sandjaie/OneLedger/pull/281) | [Phase 4.4 specification](specs/2026-09-21-phase-4-4-fx-remittance-analysis.md) · [Phase 4.4 plan](plans/2026-09-21-phase-4-4-fx-remittance-analysis.md) |
 | 4.4 Task 1 — corrections and the analysis API | **Delivered** | [plan](plans/2026-09-21-phase-4-4-fx-remittance-analysis.md) |
-| 4.4 Task 2 — corrections and analysis on screen | **Planned** | [plan](plans/2026-09-21-phase-4-4-fx-remittance-analysis.md) |
+| 4.4 Task 2 — corrections and analysis on screen | **Delivered** | [plan](plans/2026-09-21-phase-4-4-fx-remittance-analysis.md) |
 | 4.5 — optional email ingestion | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
 | 4.6 — conditional loan support | **Conditional** — no real loan has been confirmed | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
 | 4.7 — owner workspace experience | **Superseded; not owner-accepted** — 4.7.1–4.7.13 merged through [PR #263](https://github.com/sandjaie/OneLedger/pull/263), 4.7.14 merged through [PR #266](https://github.com/sandjaie/OneLedger/pull/266), 4.7.15 stopped and 4.7.16–4.7.21 replaced by Phase 4.8 | [superseded design](specs/2026-09-18-phase-4-7-workspace-experience.md) · [superseded plan](plans/2026-09-19-phase-4-7-editorial-refinement.md) |

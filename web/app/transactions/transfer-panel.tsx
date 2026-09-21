@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
 import { AttentionRow } from "@/app/ui/attention-row";
 import { type apiFetch, errorText } from "@/lib/api/client";
 import { moneyText } from "@/lib/money/format";
@@ -157,6 +158,12 @@ export function TransferQueue({ currencies, household, request, onChanged }: Sha
     }
   }
 
+  // No `onChanged()`: a correction records who carried a transfer and what they charged, and
+  // touches no transaction row — unlike confirming or unlinking, which move both legs.
+  function replace(corrected: TransferRow) {
+    setConfirmed((current) => current.map((one) => (one.id === corrected.id ? corrected : one)));
+  }
+
   // What the movement cost, exactly as the API computed it: nothing here is derived.
   function cost(transfer: TransferRow) {
     if (!transfer.totalCostSource) return "No FX cost recorded.";
@@ -243,6 +250,15 @@ export function TransferQueue({ currencies, household, request, onChanged }: Sha
                   >
                     Unlink
                   </Button>
+                  {transfer.transferKind === "remittance" && (
+                    <RemittanceCorrection
+                      currencies={currencies}
+                      household={household}
+                      onCorrected={replace}
+                      request={request}
+                      transfer={transfer}
+                    />
+                  )}
                 </li>
               ))}
             </ul>
@@ -250,6 +266,162 @@ export function TransferQueue({ currencies, household, request, onChanged }: Sha
         </>
       )}
     </section>
+  );
+}
+
+type CorrectionProps = {
+  currencies: Array<CurrencyRow>;
+  household: HouseholdResponse;
+  onCorrected: (corrected: TransferRow) => void;
+  request: typeof apiFetch;
+  transfer: TransferRow;
+};
+
+/** Phase 4.4: the two fields no statement states, recorded where the remittance is.
+ *
+ * The fee is sent as the owner typed it — a decimal string the service validates, translates
+ * once at the transfer's own date and folds into the stored cost. Clearing it sends explicit
+ * nulls, which is a different request from leaving it alone: a correction that names no fee
+ * leaves the frozen cost untouched. Nothing here computes a total.
+ */
+export function RemittanceCorrection({
+  currencies,
+  household,
+  onCorrected,
+  request,
+  transfer,
+}: CorrectionProps) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string>();
+  // What the row stores now, as the inputs show it. Re-derived whenever the form opens, so a
+  // second correction starts from what the service stored rather than what was typed before.
+  const stored = {
+    provider: transfer.provider ?? "",
+    fee: transfer.explicitFeeAmount ?? "",
+    feeCurrency: transfer.explicitFeeCurrency ?? transfer.sourceCurrency,
+    notes: transfer.notes ?? "",
+  };
+  const [provider, setProvider] = useState(stored.provider);
+  const [fee, setFee] = useState(stored.fee);
+  const [feeCurrency, setFeeCurrency] = useState(stored.feeCurrency);
+  const [notes, setNotes] = useState(stored.notes);
+
+  function reveal() {
+    if (!open) {
+      setProvider(stored.provider);
+      setFee(stored.fee);
+      setFeeCurrency(stored.feeCurrency);
+      setNotes(stored.notes);
+      setProblem(undefined);
+    }
+    setOpen((current) => !current);
+  }
+
+  async function save() {
+    setBusy(true);
+    setProblem(undefined);
+    const trimmedProvider = provider.trim();
+    const trimmedFee = fee.trim();
+    // Only what the owner actually edited is sent. A key left out leaves that stored value
+    // alone, and the fee's absence is what keeps a frozen cost frozen: naming an unchanged fee
+    // would have the service re-translate it at the transfer's date, which a rate corrected or
+    // removed since then would either move or refuse (ADR-0002). Clearing a recorded fee is the
+    // one case that sends explicit nulls — a different request, and deliberately so.
+    const body: Record<string, string | null> = {};
+    if (trimmedProvider !== stored.provider) {
+      body.provider = trimmedProvider === "" ? null : trimmedProvider;
+    }
+    if (trimmedFee !== stored.fee || feeCurrency !== stored.feeCurrency) {
+      body.explicitFeeAmount = trimmedFee === "" ? null : trimmedFee;
+      body.explicitFeeCurrency = trimmedFee === "" ? null : feeCurrency;
+    }
+    if (notes.trim() !== stored.notes) body.notes = notes.trim() === "" ? null : notes;
+
+    try {
+      const corrected = await request<TransferRow>(`/transfers/${transfer.id}`, {
+        method: "PATCH",
+        headers: JSON_HEADERS,
+        body: JSON.stringify(body),
+      });
+      onCorrected(corrected);
+      setOpen(false);
+    } catch (error) {
+      setProblem(errorText(error, "The remittance was not corrected. Retry."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const recorded = transfer.provider ?? "No provider recorded";
+
+  return (
+    <div className="remittance-correction">
+      <Button
+        aria-label={`Record who carried the remittance of ${transfer.transferDate}`}
+        disabled={busy}
+        onClick={reveal}
+        size="sm"
+        type="button"
+        variant="ghost"
+      >
+        {open ? "Close" : recorded}
+      </Button>
+      {open && (
+        <div className="remittance-correction-form">
+          {problem && <p className="inline-alert" role="alert">{problem}</p>}
+          <label className="text-field" htmlFor={`provider-${transfer.id}`}>
+            <span>Provider</span>
+            <Input
+              id={`provider-${transfer.id}`}
+              onChange={(event) => setProvider(event.target.value)}
+              placeholder="Who carried it"
+              value={provider}
+            />
+          </label>
+          <label className="text-field" htmlFor={`fee-${transfer.id}`}>
+            <span>Fee the provider itemised</span>
+            <Input
+              id={`fee-${transfer.id}`}
+              inputMode="decimal"
+              onChange={(event) => setFee(event.target.value)}
+              placeholder="Leave empty if none"
+              value={fee}
+            />
+          </label>
+          <label className="text-field" htmlFor={`fee-currency-${transfer.id}`}>
+            <span>Fee currency</span>
+            <NativeSelect
+              id={`fee-currency-${transfer.id}`}
+              onChange={(event) => setFeeCurrency(event.target.value)}
+              value={feeCurrency}
+            >
+              {currencies.map((row) => (
+                <option key={row.code} value={row.code}>{row.code}</option>
+              ))}
+            </NativeSelect>
+          </label>
+          <label className="text-field" htmlFor={`notes-${transfer.id}`}>
+            <span>Note</span>
+            <Input
+              id={`notes-${transfer.id}`}
+              maxLength={500}
+              onChange={(event) => setNotes(event.target.value)}
+              value={notes}
+            />
+          </label>
+          <p className="lede">
+            The fee is converted once, at this transfer&apos;s own date, and added to the spread
+            already recorded. A day with no rate for that currency is refused rather than guessed.
+            {transfer.sourceCurrency !== household.baseCurrency
+              && ` Cost is stated in ${transfer.sourceCurrency}.`}
+          </p>
+          <Button disabled={busy} onClick={() => void save()} type="button">
+            {busy ? "Saving…" : "Save"}
+          </Button>
+        </div>
+      )}
+    </div>
   );
 }
 

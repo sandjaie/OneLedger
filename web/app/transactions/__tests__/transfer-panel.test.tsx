@@ -331,6 +331,134 @@ describe("the transfer queue", () => {
   });
 });
 
+describe("recording who carried a remittance", () => {
+  function open(request: ReturnType<typeof routes>) {
+    queue(request);
+    fireEvent.click(screen.getByRole("button", { name: "Find transfers" }));
+    return screen.findByRole("button", { name: /Record who carried the remittance/ });
+  }
+
+  it("patches the provider and fee, then shows the cost the service recomputed", async () => {
+    const corrected = transfer({
+      provider: "Exchange house",
+      explicitFeeAmount: "26.2500",
+      explicitFeeCurrency: "XAE",
+      totalCostSource: "103.8550",
+    });
+    const request = routes({
+      "GET /transfers/candidates": { candidates: [], total: 0 },
+      "GET /transfers?status=confirmed": { transfers: [transfer({})], total: 1 },
+      "PATCH /transfers/tr-1": corrected,
+    });
+    fireEvent.click(await open(request));
+
+    fireEvent.change(screen.getByLabelText("Provider"), { target: { value: "  Exchange house  " } });
+    fireEvent.change(screen.getByLabelText("Fee the provider itemised"), { target: { value: "26.25" } });
+    fireEvent.change(screen.getByLabelText("Fee currency"), { target: { value: "XAE" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(screen.getByTestId("transfer-tr-1").textContent)
+      .toContain(formatMoney("103.8550", away)));
+    const [[, init]] = request.mock.calls.filter(([, one]) => (one as RequestInit | undefined)?.method === "PATCH");
+    // Trimmed by the browser, but the amount goes as typed: the service owns its precision.
+    // The untouched note is absent rather than sent as null — only edits are named.
+    expect(JSON.parse(String((init as RequestInit).body))).toEqual({
+      provider: "Exchange house",
+      explicitFeeAmount: "26.25",
+      explicitFeeCurrency: "XAE",
+    });
+    // The recomputed fee is shown in the currency it was recorded in.
+    expect(screen.getByTestId("transfer-tr-1").textContent).toContain(formatMoney("26.2500", away));
+  });
+
+  it("names only what the owner edited, so an untouched fee is never re-translated", async () => {
+    // The service recomputes a cost only for a submitted fee. Re-sending a stored one would have
+    // it re-translated at the transfer's date — which a rate corrected since would move, and a
+    // rate removed since would refuse, blocking a correction about no money at all (ADR-0002).
+    const request = routes({
+      "GET /transfers/candidates": { candidates: [], total: 0 },
+      "GET /transfers?status=confirmed": {
+        transfers: [transfer({
+          provider: null,
+          explicitFeeAmount: "26.2500",
+          explicitFeeCurrency: "XAE",
+          totalCostSource: "103.8550",
+        })],
+        total: 1,
+      },
+      "PATCH /transfers/tr-1": transfer({
+        provider: "Exchange house",
+        explicitFeeAmount: "26.2500",
+        explicitFeeCurrency: "XAE",
+        totalCostSource: "103.8550",
+      }),
+    });
+    fireEvent.click(await open(request));
+
+    fireEvent.change(screen.getByLabelText("Provider"), { target: { value: "Exchange house" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(request.mock.calls.some(([, init]) =>
+      (init as RequestInit | undefined)?.method === "PATCH")).toBe(true));
+    const [[, init]] = request.mock.calls.filter(([, one]) => (one as RequestInit | undefined)?.method === "PATCH");
+    expect(Object.keys(JSON.parse(String((init as RequestInit).body)))).toEqual(["provider"]);
+  });
+
+  it("clears the fee with explicit nulls, which is not the same as leaving it alone", async () => {
+    const request = routes({
+      "GET /transfers/candidates": { candidates: [], total: 0 },
+      "GET /transfers?status=confirmed": {
+        transfers: [transfer({ explicitFeeAmount: "26.2500", explicitFeeCurrency: "XAE", provider: "Exchange house" })],
+        total: 1,
+      },
+      "PATCH /transfers/tr-1": transfer({ provider: "Exchange house", totalCostSource: "77.6050" }),
+    });
+    fireEvent.click(await open(request));
+
+    fireEvent.change(screen.getByLabelText("Fee the provider itemised"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(request.mock.calls.some(([, init]) =>
+      (init as RequestInit | undefined)?.method === "PATCH")).toBe(true));
+    const [[, init]] = request.mock.calls.filter(([, one]) => (one as RequestInit | undefined)?.method === "PATCH");
+    const body = JSON.parse(String((init as RequestInit).body));
+    expect(body.explicitFeeAmount).toBeNull();
+    expect(body.explicitFeeCurrency).toBeNull();
+  });
+
+  it("shows the service's own sentence when a correction is refused", async () => {
+    const request = routes({
+      "GET /transfers/candidates": { candidates: [], total: 0 },
+      "GET /transfers?status=confirmed": { transfers: [transfer({})], total: 1 },
+      "PATCH /transfers/tr-1": refusal(
+        422,
+        "no exchange rate is held for the fee's currency on the transfer's date",
+      ),
+    });
+    fireEvent.click(await open(request));
+
+    fireEvent.change(screen.getByLabelText("Fee the provider itemised"), { target: { value: "10" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect((await screen.findByRole("alert")).textContent)
+      .toBe("no exchange rate is held for the fee's currency on the transfer's date");
+  });
+
+  it("offers no correction for a transfer that is not a remittance", async () => {
+    queue(routes({
+      "GET /transfers/candidates": { candidates: [], total: 0 },
+      "GET /transfers?status=confirmed": {
+        transfers: [transfer({ transferKind: "internal_same_currency" })],
+        total: 1,
+      },
+    }));
+    fireEvent.click(screen.getByRole("button", { name: "Find transfers" }));
+
+    await screen.findByRole("button", { name: /Unlink/ });
+    expect(screen.queryByRole("button", { name: /Record who carried the remittance/ })).toBeNull();
+  });
+});
+
 describe("linking one transaction by hand", () => {
   it("ranks its peers, narrows them by search, and links the chosen one as the owner's", async () => {
     const subject = leg({ id: "txn-out" });
