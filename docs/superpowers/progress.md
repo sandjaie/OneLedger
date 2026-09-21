@@ -83,6 +83,7 @@ the pre-structure narrative lives in the [12 September delivery history](reports
 
 | Gate | State | Evidence or completion path |
 | --- | --- | --- |
+| Owner acceptance worksheet | **Available** — every implemented capability from Phase 0.1 to Phase 4.4 as owner-operated steps with an accepted-when result; open it in a browser and work down it. Verdicts and notes stay in that browser, so the tracked file carries no status and this table remains the only status record | [owner acceptance log](../tests/owner-acceptance-log.html) |
 | Real permitted-account Google sign-in and protected access | Owner-operated evidence open; does not block Phase 2 planning | [historical evidence](reports/2026-09-12-progress-history.md) |
 | Real second-account rejection and chooser recovery | Owner-operated evidence open; does not block Phase 2 planning | [historical evidence](reports/2026-09-12-progress-history.md) |
 | Phase 1.6 owner acceptance | **Open** — delivered via PRs #165–#201; run the real detailed and summary statements through the app and record structural pass/fail counts | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-20--portfolio-web-and-phase-16-acceptance) |
