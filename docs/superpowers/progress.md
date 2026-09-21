@@ -6,16 +6,16 @@ the next action, active delivery gates, and links to evidence. Product outcomes 
 [master implementation plan](../product/master-implementation-plan.html), and deferred or
 unapproved information in the [project register](project-register.md).
 
-Updated: 20 September 2026.
+Updated: 21 September 2026.
 
 ## Current position
 
 | Item | Current state | Evidence |
 | --- | --- | --- |
-| Current outcome | **Phase 4.8 — compact financial console** | [Phase 4.8 specification](specs/2026-09-20-phase-4-8-compact-financial-console.md) |
-| Outcome state | **Phase 4.8 is owner-accepted and implementation-complete.** Tasks 4.8.1–4.8.12 are merged through [PR #267](https://github.com/sandjaie/OneLedger/pull/267), [PR #268](https://github.com/sandjaie/OneLedger/pull/268), [PR #269](https://github.com/sandjaie/OneLedger/pull/269), [PR #270](https://github.com/sandjaie/OneLedger/pull/270), [PR #271](https://github.com/sandjaie/OneLedger/pull/271), [PR #272](https://github.com/sandjaie/OneLedger/pull/272), [PR #273](https://github.com/sandjaie/OneLedger/pull/273), [PR #274](https://github.com/sandjaie/OneLedger/pull/274), [PR #275](https://github.com/sandjaie/OneLedger/pull/275), [PR #276](https://github.com/sandjaie/OneLedger/pull/276), [PR #277](https://github.com/sandjaie/OneLedger/pull/277) and [PR #278](https://github.com/sandjaie/OneLedger/pull/278). Task 4.8.13 completed the application-wide fidelity audit; its reviewed UI received explicit owner visual/UX acceptance | [Phase 4.8 plan](plans/2026-09-20-phase-4-8-compact-financial-console.md) |
-| Next product action | **None planned — return to the next owner-selected roadmap outcome after this final Phase 4.8 delivery** | [master implementation plan](../product/master-implementation-plan.html) |
-| Current implementation task | **None — Task 4.8.13 implementation, review and owner visual/UX acceptance are complete**; no further Phase 4.8 task is planned and 4.7.15 remains stopped | [Phase 4.8 plan](plans/2026-09-20-phase-4-8-compact-financial-console.md#task-4813--application-wide-fidelity-audit-and-owner-acceptance) |
+| Current outcome | **Phase 4.4 — FX and remittance analysis** | [Phase 4.4 specification](specs/2026-09-21-phase-4-4-fx-remittance-analysis.md) |
+| Outcome state | **Phase 4.4 is specified and plan-reviewed; no implementation branch has started.** Phase 4.8 remains owner-accepted and implementation-complete, and Phase 4.3 remains implementation-complete with owner acceptance open | [Phase 4.4 plan](plans/2026-09-21-phase-4-4-fx-remittance-analysis.md) |
+| Next product action | Implement Phase 4.4 Task 1 — corrections and the analysis API; owner acceptance of Phases 4.1–4.3 on real statements, payslips and holdings | [Phase 4.4 plan](plans/2026-09-21-phase-4-4-fx-remittance-analysis.md) |
+| Current implementation task | Phase 4.4 Task 1 next, after this plan merges | [Phase 4.4 plan](plans/2026-09-21-phase-4-4-fx-remittance-analysis.md) |
 
 ## Canonical phase status
 
@@ -57,7 +57,9 @@ Updated: 20 September 2026.
 | 4.3 — investment analysis | **Implementation complete; owner acceptance open** — [PR #245](https://github.com/sandjaie/OneLedger/pull/245), [PR #246](https://github.com/sandjaie/OneLedger/pull/246), [PR #247](https://github.com/sandjaie/OneLedger/pull/247) | [Phase 4.3 specification](specs/2026-09-16-phase-4-3-investment-analysis.md) · [Phase 4.3 plan](plans/2026-09-16-phase-4-3-investment-analysis.md) |
 | 4.3 Task 1 — investment analysis API | **Delivered** — [PR #246](https://github.com/sandjaie/OneLedger/pull/246) | [plan](plans/2026-09-16-phase-4-3-investment-analysis.md) |
 | 4.3 Task 2 — investment analysis on the Investments screen | **Delivered** — [PR #247](https://github.com/sandjaie/OneLedger/pull/247) | [plan](plans/2026-09-16-phase-4-3-investment-analysis.md) |
-| 4.4 — FX and remittance analysis | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
+| 4.4 — FX and remittance analysis | **Specified** | [Phase 4.4 specification](specs/2026-09-21-phase-4-4-fx-remittance-analysis.md) · [Phase 4.4 plan](plans/2026-09-21-phase-4-4-fx-remittance-analysis.md) |
+| 4.4 Task 1 — corrections and the analysis API | **Planned** | [plan](plans/2026-09-21-phase-4-4-fx-remittance-analysis.md) |
+| 4.4 Task 2 — corrections and analysis on screen | **Planned** | [plan](plans/2026-09-21-phase-4-4-fx-remittance-analysis.md) |
 | 4.5 — optional email ingestion | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
 | 4.6 — conditional loan support | **Conditional** — no real loan has been confirmed | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
 | 4.7 — owner workspace experience | **Superseded; not owner-accepted** — 4.7.1–4.7.13 merged through [PR #263](https://github.com/sandjaie/OneLedger/pull/263), 4.7.14 merged through [PR #266](https://github.com/sandjaie/OneLedger/pull/266), 4.7.15 stopped and 4.7.16–4.7.21 replaced by Phase 4.8 | [superseded design](specs/2026-09-18-phase-4-7-workspace-experience.md) · [superseded plan](plans/2026-09-19-phase-4-7-editorial-refinement.md) |
