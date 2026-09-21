@@ -363,7 +363,7 @@ def test_another_households_remittances_never_appear(live: Fixture) -> None:
     assert analysis()["corridors"] == []
 
 
-def test_a_rejected_or_non_remittance_transfer_is_outside_the_analysis(live: Fixture) -> None:
+def test_a_non_remittance_transfer_is_outside_the_analysis(live: Fixture) -> None:
     transfer_id = a_remittance(
         live, sent="1000", received="22200", spread="10.0000", total="10.0000"
     )
@@ -375,6 +375,44 @@ def test_a_rejected_or_non_remittance_transfer_is_outside_the_analysis(live: Fix
     live.conn.commit()
 
     assert analysis()["corridors"] == []
+
+
+def test_a_rejected_remittance_is_outside_the_analysis(live: Fixture) -> None:
+    transfer_id = a_remittance(
+        live, sent="1000", received="22200", spread="10.0000", total="10.0000"
+    )
+    with live.conn.cursor() as cur:
+        # A rejected pair keeps its row so the matcher does not re-propose it; its money was
+        # never moved as one transfer, so no cost of it belongs in the analysis.
+        cur.execute("UPDATE transfer SET status = 'rejected' WHERE id = %s", (transfer_id,))
+    live.conn.commit()
+
+    assert analysis()["corridors"] == []
+
+
+def test_two_spellings_of_one_provider_stay_two_rows(live: Fixture) -> None:
+    # Exact match by contract: merging them is the owner's correction to make, not the
+    # analysis's guess, because two similar names can be two real channels.
+    a_remittance(
+        live,
+        sent="1000",
+        received="22200",
+        provider="Exchange house",
+        spread="10.0000",
+        total="10.0000",
+    )
+    a_remittance(
+        live,
+        sent="1000",
+        received="22200",
+        provider="exchange house",
+        spread="20.0000",
+        total="20.0000",
+    )
+
+    year = only_year(analysis())
+
+    assert sorted(g["provider"] for g in year["providers"]) == ["Exchange house", "exchange house"]
 
 
 # ---------------------------------------------------------------------------
@@ -632,6 +670,173 @@ def test_a_later_rate_change_never_moves_a_stored_cost_or_its_reconciliation(
     assert Decimal(group["feesSource"]) + Decimal(group["spreadSource"]) == Decimal(
         group["totalCostSource"]
     )
+
+
+def test_a_provider_only_correction_never_retranslates_a_frozen_fee(live: Fixture) -> None:
+    """A correction about no money must not re-derive one.
+
+    Rebuilding the stored fee and translating it again on every `PATCH` let a later rate
+    correction move a cost the owner had already frozen — through a request that named only the
+    provider.
+    """
+    transfer_id = a_remittance(
+        live, sent="5000", received="111000", provider=None, spread="77.6000", total="77.6000"
+    )
+    a_rate(live, MARCH, "USD", "3.6725")
+    client().patch(
+        f"/transfers/{transfer_id}",
+        json={"explicitFeeAmount": "10", "explicitFeeCurrency": "USD"},
+        headers=ORIGIN,
+    )
+    frozen = stored(live, transfer_id)
+    before = only_year(analysis())
+
+    # That date's rate is corrected, then the owner labels the provider — a request about no
+    # money at all.
+    a_rate(live, MARCH, "USD", "1.0000")
+    labelled = client().patch(
+        f"/transfers/{transfer_id}", json={"provider": "Exchange house"}, headers=ORIGIN
+    )
+
+    assert labelled.status_code == 200, labelled.text
+    assert labelled.json()["totalCostSource"] == "114.3250"
+    # Only the provider moved.
+    assert stored(live, transfer_id)[1:] == frozen[1:]
+    assert only_year(analysis())["totalCostSource"] == before["totalCostSource"]
+
+
+def test_a_provider_only_correction_survives_the_rates_removal(live: Fixture) -> None:
+    transfer_id = a_remittance(
+        live, sent="5000", received="111000", provider=None, spread="77.6000", total="77.6000"
+    )
+    a_rate(live, MARCH, "USD", "3.6725")
+    client().patch(
+        f"/transfers/{transfer_id}",
+        json={"explicitFeeAmount": "10", "explicitFeeCurrency": "USD"},
+        headers=ORIGIN,
+    )
+    with live.conn.cursor() as cur:
+        cur.execute("DELETE FROM fx_rate WHERE rate_date = %s AND base_currency = 'USD'", (MARCH,))
+    live.conn.commit()
+
+    labelled = client().patch(
+        f"/transfers/{transfer_id}", json={"provider": "Exchange house"}, headers=ORIGIN
+    )
+
+    # Labelling a provider cannot depend on a rate the correction does not use.
+    assert labelled.status_code == 200, labelled.text
+    assert labelled.json()["totalCostSource"] == "114.3250"
+
+
+def test_another_households_remittance_cannot_be_corrected(live: Fixture) -> None:
+    with live.conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO household (name, base_currency, secondary_currency)"
+            " VALUES ('other', %s, %s) RETURNING id",
+            (live.base, live.secondary),
+        )
+        other = cur.fetchone()[0]  # type: ignore[index]
+        cur.execute(
+            "INSERT INTO person (household_id, display_name, is_self) VALUES (%s, 'other', true)",
+            (other,),
+        )
+    live.conn.commit()
+    transfer_id = a_remittance(
+        live,
+        sent="5000",
+        received="111000",
+        provider=None,
+        spread="77.6000",
+        total="77.6000",
+        household=other,
+    )
+    before = stored(live, transfer_id)
+
+    response = client().patch(
+        f"/transfers/{transfer_id}",
+        json={
+            "provider": "Mine now",
+            "explicitFeeAmount": "26.25",
+            "explicitFeeCurrency": live.base,
+        },
+        headers=ORIGIN,
+    )
+
+    assert response.status_code == 404
+    assert stored(live, transfer_id) == before
+
+
+def test_an_over_large_fee_is_refused_rather_than_overflowing(live: Fixture) -> None:
+    transfer_id = a_remittance(
+        live, sent="5000", received="111000", spread="77.6000", total="77.6000"
+    )
+
+    responses = [
+        client().patch(
+            f"/transfers/{transfer_id}",
+            json={"explicitFeeAmount": amount, "explicitFeeCurrency": live.base},
+            headers=ORIGIN,
+        )
+        for amount in ("1E+18", "999999999999999999999", "NaN", "+5")
+    ]
+
+    assert [r.status_code for r in responses] == [422, 422, 422, 422]
+    assert stored(live, transfer_id)[1] is None
+
+
+def test_a_rate_later_observed_moves_the_approximate_label_and_nothing_else(
+    live: Fixture,
+) -> None:
+    a_remittance(
+        live,
+        sent="5000",
+        received="111000",
+        provider="Exchange house",
+        implied="22.2000000000",
+        market="22.5500000000",
+        spread="77.6000",
+        total="77.6000",
+    )
+    a_rate(live, MARCH, "INR", "0.0443", carried_from=date(2026, 2, 28))
+
+    carried = only_year(analysis())["providers"][0]
+    assert carried["approximateCount"] == 1
+
+    # The real rate for that day arrives later. The cost stays frozen; only the label moves.
+    a_rate(live, MARCH, "INR", "0.0443")
+
+    observed = only_year(analysis())["providers"][0]
+    assert observed["approximateCount"] == 0
+    assert observed["totalCostSource"] == carried["totalCostSource"] == "77.6000"
+    assert observed["effectiveCostPct"] == carried["effectiveCostPct"]
+
+
+def test_a_third_currency_fee_on_a_carried_forward_rate_is_labelled_approximate(
+    live: Fixture,
+) -> None:
+    transfer_id = a_remittance(
+        live,
+        sent="2000",
+        received="2000",
+        destination_currency=live.base,
+        provider="Bank wire",
+        spread=None,
+        total=None,
+    )
+    # A same-currency remittance has no market rate, so only the fee's own rate can make its
+    # cost approximate (Invariant 7).
+    a_rate(live, MARCH, "USD", "3.6725", carried_from=date(2026, 2, 28))
+
+    response = client().patch(
+        f"/transfers/{transfer_id}",
+        json={"explicitFeeAmount": "10", "explicitFeeCurrency": "USD"},
+        headers=ORIGIN,
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["totalCostSource"] == "36.7250"
+    assert response.json()["costIsApproximate"] is True
+    assert only_year(analysis())["providers"][0]["approximateCount"] == 1
 
 
 def test_an_unknown_foreign_rejected_or_non_remittance_transfer_is_all_one_answer(
