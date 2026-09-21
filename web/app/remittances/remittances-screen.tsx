@@ -40,6 +40,13 @@ function corridorKey(corridor: CorridorOut) {
   return `${corridor.sourceCurrency}-${corridor.destinationCurrency}`;
 }
 
+/** How many of a year's costed transfers rest on a carried-forward rate. A count of rows, which
+ * the browser may add; no amount is summed here. */
+function approximateTotal(year: CorridorYearOut) {
+  return year.providers.reduce((count, row) => count + row.approximateCount, 0)
+    + (year.unattributed?.approximateCount ?? 0);
+}
+
 export function RemittancesScreen({ currencies, request }: Props) {
   const [analysis, setAnalysis] = useState<RemittanceAnalysisResponse>();
   const [state, setState] = useState<State>("loading");
@@ -142,7 +149,10 @@ export function RemittancesScreen({ currencies, request }: Props) {
                   <small>
                     {" "}
                     Outside the comparison ·{" "}
-                    <Link href="/transactions">label {year.unattributed.transferCount} on Transactions</Link>
+                    <Link href="/transactions">
+                      Label {year.unattributed.transferCount}{" "}
+                      {year.unattributed.transferCount === 1 ? "transfer" : "transfers"} on Transactions
+                    </Link>
                   </small>
                 </th>
                 <td>{transferCount(year.unattributed)}</td>
@@ -152,7 +162,18 @@ export function RemittancesScreen({ currencies, request }: Props) {
           </tbody>
           <tfoot>
             <tr>
-              <th scope="row">Total</th>
+              <th scope="row">
+                Total
+                {/* The server's percentage is of the costed part alone — `_effective_pct`
+                    refuses a percentage of an unknown whole — so a Sent figure larger than the
+                    costed one must say what the percentage beside it actually covers. */}
+                {year.totalCostedSentSource !== year.totalSentSource && (
+                  <small>Effective covers the costed part only</small>
+                )}
+                {approximateTotal(year) > 0 && (
+                  <small>{approximateTotal(year)} on a carried-forward rate</small>
+                )}
+              </th>
               <td>{year.providers.reduce((count, row) => count + row.transferCount, 0)
                 + (year.unattributed?.transferCount ?? 0)}</td>
               <td>{money(year.totalSentSource, corridor.sourceCurrency)}</td>
@@ -164,7 +185,7 @@ export function RemittancesScreen({ currencies, request }: Props) {
                   ? NOT_COSTED
                   : formatPercent(year.totalEffectiveCostPct)}
               </td>
-              <td aria-hidden="true" />
+              <td />
             </tr>
           </tfoot>
         </table>
@@ -224,7 +245,15 @@ export function RemittancesScreen({ currencies, request }: Props) {
                     value: money(latest.totalCostSource, corridor.sourceCurrency),
                     detail: latest.totalEffectiveCostPct === null
                       ? "No transfer this year has a recorded cost"
-                      : `${formatPercent(latest.totalEffectiveCostPct)} of the money it was charged on`,
+                      : [
+                          `${formatPercent(latest.totalEffectiveCostPct)} of the money it was charged on`,
+                          latest.totalCostedSentSource === latest.totalSentSource
+                            ? null
+                            : `${money(latest.totalCostedSentSource, corridor.sourceCurrency)} of it`,
+                          approximateTotal(latest) > 0
+                            ? `${approximateTotal(latest)} on a carried-forward rate`
+                            : null,
+                        ].filter(Boolean).join(" · "),
                   },
                   {
                     label: "Cheapest channel",

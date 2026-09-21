@@ -158,6 +158,8 @@ export function TransferQueue({ currencies, household, request, onChanged }: Sha
     }
   }
 
+  // No `onChanged()`: a correction records who carried a transfer and what they charged, and
+  // touches no transaction row — unlike confirming or unlinking, which move both legs.
   function replace(corrected: TransferRow) {
     setConfirmed((current) => current.map((one) => (one.id === corrected.id ? corrected : one)));
   }
@@ -292,28 +294,55 @@ export function RemittanceCorrection({
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string>();
-  const [provider, setProvider] = useState(transfer.provider ?? "");
-  const [fee, setFee] = useState(transfer.explicitFeeAmount ?? "");
-  const [feeCurrency, setFeeCurrency] = useState(
-    transfer.explicitFeeCurrency ?? transfer.sourceCurrency,
-  );
-  const [notes, setNotes] = useState(transfer.notes ?? "");
+  // What the row stores now, as the inputs show it. Re-derived whenever the form opens, so a
+  // second correction starts from what the service stored rather than what was typed before.
+  const stored = {
+    provider: transfer.provider ?? "",
+    fee: transfer.explicitFeeAmount ?? "",
+    feeCurrency: transfer.explicitFeeCurrency ?? transfer.sourceCurrency,
+    notes: transfer.notes ?? "",
+  };
+  const [provider, setProvider] = useState(stored.provider);
+  const [fee, setFee] = useState(stored.fee);
+  const [feeCurrency, setFeeCurrency] = useState(stored.feeCurrency);
+  const [notes, setNotes] = useState(stored.notes);
+
+  function reveal() {
+    if (!open) {
+      setProvider(stored.provider);
+      setFee(stored.fee);
+      setFeeCurrency(stored.feeCurrency);
+      setNotes(stored.notes);
+      setProblem(undefined);
+    }
+    setOpen((current) => !current);
+  }
 
   async function save() {
     setBusy(true);
     setProblem(undefined);
     const trimmedProvider = provider.trim();
     const trimmedFee = fee.trim();
+    // Only what the owner actually edited is sent. A key left out leaves that stored value
+    // alone, and the fee's absence is what keeps a frozen cost frozen: naming an unchanged fee
+    // would have the service re-translate it at the transfer's date, which a rate corrected or
+    // removed since then would either move or refuse (ADR-0002). Clearing a recorded fee is the
+    // one case that sends explicit nulls — a different request, and deliberately so.
+    const body: Record<string, string | null> = {};
+    if (trimmedProvider !== stored.provider) {
+      body.provider = trimmedProvider === "" ? null : trimmedProvider;
+    }
+    if (trimmedFee !== stored.fee || feeCurrency !== stored.feeCurrency) {
+      body.explicitFeeAmount = trimmedFee === "" ? null : trimmedFee;
+      body.explicitFeeCurrency = trimmedFee === "" ? null : feeCurrency;
+    }
+    if (notes.trim() !== stored.notes) body.notes = notes.trim() === "" ? null : notes;
+
     try {
       const corrected = await request<TransferRow>(`/transfers/${transfer.id}`, {
         method: "PATCH",
         headers: JSON_HEADERS,
-        body: JSON.stringify({
-          provider: trimmedProvider === "" ? null : trimmedProvider,
-          explicitFeeAmount: trimmedFee === "" ? null : trimmedFee,
-          explicitFeeCurrency: trimmedFee === "" ? null : feeCurrency,
-          notes: notes.trim() === "" ? null : notes,
-        }),
+        body: JSON.stringify(body),
       });
       onCorrected(corrected);
       setOpen(false);
@@ -331,7 +360,7 @@ export function RemittanceCorrection({
       <Button
         aria-label={`Record who carried the remittance of ${transfer.transferDate}`}
         disabled={busy}
-        onClick={() => setOpen((current) => !current)}
+        onClick={reveal}
         size="sm"
         type="button"
         variant="ghost"

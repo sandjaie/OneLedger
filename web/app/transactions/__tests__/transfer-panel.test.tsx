@@ -361,14 +361,47 @@ describe("recording who carried a remittance", () => {
       .toContain(formatMoney("103.8550", away)));
     const [[, init]] = request.mock.calls.filter(([, one]) => (one as RequestInit | undefined)?.method === "PATCH");
     // Trimmed by the browser, but the amount goes as typed: the service owns its precision.
+    // The untouched note is absent rather than sent as null — only edits are named.
     expect(JSON.parse(String((init as RequestInit).body))).toEqual({
       provider: "Exchange house",
       explicitFeeAmount: "26.25",
       explicitFeeCurrency: "XAE",
-      notes: null,
     });
     // The recomputed fee is shown in the currency it was recorded in.
     expect(screen.getByTestId("transfer-tr-1").textContent).toContain(formatMoney("26.2500", away));
+  });
+
+  it("names only what the owner edited, so an untouched fee is never re-translated", async () => {
+    // The service recomputes a cost only for a submitted fee. Re-sending a stored one would have
+    // it re-translated at the transfer's date — which a rate corrected since would move, and a
+    // rate removed since would refuse, blocking a correction about no money at all (ADR-0002).
+    const request = routes({
+      "GET /transfers/candidates": { candidates: [], total: 0 },
+      "GET /transfers?status=confirmed": {
+        transfers: [transfer({
+          provider: null,
+          explicitFeeAmount: "26.2500",
+          explicitFeeCurrency: "XAE",
+          totalCostSource: "103.8550",
+        })],
+        total: 1,
+      },
+      "PATCH /transfers/tr-1": transfer({
+        provider: "Exchange house",
+        explicitFeeAmount: "26.2500",
+        explicitFeeCurrency: "XAE",
+        totalCostSource: "103.8550",
+      }),
+    });
+    fireEvent.click(await open(request));
+
+    fireEvent.change(screen.getByLabelText("Provider"), { target: { value: "Exchange house" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(request.mock.calls.some(([, init]) =>
+      (init as RequestInit | undefined)?.method === "PATCH")).toBe(true));
+    const [[, init]] = request.mock.calls.filter(([, one]) => (one as RequestInit | undefined)?.method === "PATCH");
+    expect(Object.keys(JSON.parse(String((init as RequestInit).body)))).toEqual(["provider"]);
   });
 
   it("clears the fee with explicit nulls, which is not the same as leaving it alone", async () => {

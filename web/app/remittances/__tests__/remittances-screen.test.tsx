@@ -111,8 +111,12 @@ describe("remittances screen", () => {
     render(<RemittancesScreen currencies={currencies} request={analysisRequest(body)} />);
 
     await screen.findByRole("heading", { name: "XAA → XBB" });
-    expect(screen.getAllByText(/Cheapest Cheap/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/A 200.00 not saved/)).toBeTruthy();
+    // The badge on the provider's own row, and the year summary, are separate statements.
+    const table = screen.getByRole("table", { name: /by provider in 2026/ });
+    const cheapestRow = Array.from(table.querySelectorAll("tbody tr"))
+      .find((row) => row.textContent?.includes("Cheap"));
+    expect(cheapestRow?.textContent).toContain("Cheapest");
+    expect(screen.getByText(/Cheapest Cheap · A 200.00 not saved/)).toBeTruthy();
     expect(screen.getByLabelText("XAA → XBB in 2026").textContent)
       .toContain("Routing everything through it would have saved A 200.00");
   });
@@ -144,12 +148,12 @@ describe("remittances screen", () => {
     const row = screen.getByTestId("unattributed-2026");
     expect(row.textContent).toContain("No provider recorded");
     expect(row.textContent).toContain("Outside the comparison");
-    expect(row.textContent).toContain("label 3 on Transactions");
+    expect(row.textContent).toContain("Label 3 transfers on Transactions");
     expect(screen.getByRole("table", { name: /by provider in 2026/ }).querySelector("tfoot")?.textContent)
       .toContain("A 60,000.00");
   });
 
-  it("marks a figure that rests on a carried-forward rate", async () => {
+  it("marks a provider row that rests on a carried-forward rate", async () => {
     render(
       <RemittancesScreen
         currencies={currencies}
@@ -158,7 +162,10 @@ describe("remittances screen", () => {
     );
 
     await screen.findByRole("heading", { name: "XAA → XBB" });
-    expect(screen.getByText(/1 on a carried-forward rate/)).toBeTruthy();
+    const [row] = Array.from(
+      screen.getByRole("table", { name: /by provider in 2026/ }).querySelectorAll("tbody tr"),
+    );
+    expect(row.textContent).toContain("1 on a carried-forward rate");
   });
 
   it("states that nothing is costed rather than showing a zero cost", async () => {
@@ -186,6 +193,62 @@ describe("remittances screen", () => {
     expect(table.textContent).not.toContain("A 0.00");
     expect(screen.getByLabelText("XAA → XBB in 2026").textContent)
       .toContain("No transfer this year has a recorded cost");
+  });
+
+  it("says what a partial cost covers rather than implying it covers everything", async () => {
+    // One costed provider plus uncosted unlabelled money: the server's 2.50% is of 10,000, not
+    // of the 60,000 sent, and `_effective_pct` withholds a percentage of an unknown whole — so
+    // the total row must say which part the percentage beside it covers.
+    const body = analysisWith(
+      [providerRow({ provider: "Named" })],
+      {
+        unattributed: providerRow({
+          provider: null,
+          transferCount: 1,
+          sentSource: "50000.0000",
+          costedSentSource: "0.0000",
+          feesSource: null,
+          spreadSource: null,
+          totalCostSource: null,
+          effectiveCostPct: null,
+        }),
+        totalSentSource: "60000.0000",
+        totalCostedSentSource: "10000.0000",
+      },
+    );
+    render(<RemittancesScreen currencies={currencies} request={analysisRequest(body)} />);
+
+    await screen.findByRole("heading", { name: "XAA → XBB" });
+    const footer = screen.getByRole("table", { name: /by provider in 2026/ }).querySelector("tfoot");
+    expect(footer?.textContent).toContain("Effective covers the costed part only");
+    expect(screen.getByLabelText("XAA → XBB in 2026").textContent).toContain("A 10,000.00 of it");
+  });
+
+  it("marks a total that rests partly on a carried-forward rate", async () => {
+    render(
+      <RemittancesScreen
+        currencies={currencies}
+        request={analysisRequest(analysisWith([providerRow({ approximateCount: 2 })]))}
+      />,
+    );
+
+    await screen.findByRole("heading", { name: "XAA → XBB" });
+    const footer = screen.getByRole("table", { name: /by provider in 2026/ }).querySelector("tfoot");
+    expect(footer?.textContent).toContain("2 on a carried-forward rate");
+    expect(screen.getByLabelText("XAA → XBB in 2026").textContent)
+      .toContain("2 on a carried-forward rate");
+  });
+
+  it("says there is no achieved rate rather than inventing one", async () => {
+    render(
+      <RemittancesScreen
+        currencies={currencies}
+        request={analysisRequest(analysisWith([providerRow({ avgRate: null })]))}
+      />,
+    );
+
+    await screen.findByRole("heading", { name: "XAA → XBB" });
+    expect(screen.getByText("No achieved rate")).toBeTruthy();
   });
 
   it("invites the first remittance when there is none", async () => {
