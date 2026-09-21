@@ -2688,6 +2688,71 @@ export type ConfirmedLotAllocation = {
 };
 
 /**
+ * CorridorOut
+ */
+export type CorridorOut = {
+    /**
+     * Sourcecurrency
+     */
+    sourceCurrency: string;
+    /**
+     * Destinationcurrency
+     */
+    destinationCurrency: string;
+    /**
+     * Years
+     */
+    years: Array<CorridorYearOut>;
+};
+
+/**
+ * CorridorYearOut
+ */
+export type CorridorYearOut = {
+    /**
+     * Year
+     */
+    year: number;
+    /**
+     * Totalsentsource
+     */
+    totalSentSource: string;
+    /**
+     * Totalcostedsentsource
+     */
+    totalCostedSentSource: string;
+    /**
+     * Totalfeessource
+     */
+    totalFeesSource: string | null;
+    /**
+     * Totalspreadsource
+     */
+    totalSpreadSource: string | null;
+    /**
+     * Totalcostsource
+     */
+    totalCostSource: string | null;
+    /**
+     * Totaleffectivecostpct
+     */
+    totalEffectiveCostPct: string | null;
+    /**
+     * Cheapestprovider
+     */
+    cheapestProvider: string | null;
+    /**
+     * Potentialsavingssource
+     */
+    potentialSavingsSource: string | null;
+    /**
+     * Providers
+     */
+    providers: Array<ProviderRowOut>;
+    unattributed: ProviderRowOut | null;
+};
+
+/**
  * CountAndPercent
  */
 export type CountAndPercent = {
@@ -7423,6 +7488,52 @@ export type ProposedRawRow = {
 };
 
 /**
+ * ProviderRowOut
+ */
+export type ProviderRowOut = {
+    /**
+     * Provider
+     */
+    provider: string | null;
+    /**
+     * Transfercount
+     */
+    transferCount: number;
+    /**
+     * Sentsource
+     */
+    sentSource: string;
+    /**
+     * Costedsentsource
+     */
+    costedSentSource: string;
+    /**
+     * Feessource
+     */
+    feesSource: string | null;
+    /**
+     * Spreadsource
+     */
+    spreadSource: string | null;
+    /**
+     * Totalcostsource
+     */
+    totalCostSource: string | null;
+    /**
+     * Effectivecostpct
+     */
+    effectiveCostPct: string | null;
+    /**
+     * Avgrate
+     */
+    avgRate: string | null;
+    /**
+     * Approximatecount
+     */
+    approximateCount: number;
+};
+
+/**
  * RateUsed
  */
 export type RateUsed = {
@@ -8179,6 +8290,16 @@ export type RegisterUpdate = {
      * Nomineerecorded
      */
     nomineeRecorded?: boolean | null;
+};
+
+/**
+ * RemittanceAnalysisResponse
+ */
+export type RemittanceAnalysisResponse = {
+    /**
+     * Corridors
+     */
+    corridors: Array<CorridorOut>;
 };
 
 /**
@@ -10472,6 +10593,32 @@ export type TransactionsResponse = {
      */
     total: number;
     summary: TransactionSummary;
+};
+
+/**
+ * TransferCorrection
+ *
+ * The two fields no statement states, plus the note. An omitted key leaves the stored value
+ * alone; an explicit `null` clears it — told apart by `model_fields_set`, so "clear the fee"
+ * and "leave the fee" are different requests rather than the same empty body.
+ */
+export type TransferCorrection = {
+    /**
+     * Provider
+     */
+    provider?: string | null;
+    /**
+     * Explicitfeeamount
+     */
+    explicitFeeAmount?: string | null;
+    /**
+     * Explicitfeecurrency
+     */
+    explicitFeeCurrency?: string | null;
+    /**
+     * Notes
+     */
+    notes?: string | null;
 };
 
 /**
@@ -12999,6 +13146,36 @@ export type CreateTransferTransfersPostResponses = {
 
 export type CreateTransferTransfersPostResponse = CreateTransferTransfersPostResponses[keyof CreateTransferTransfersPostResponses];
 
+export type RemittanceAnalysisTransfersAnalysisGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Year
+         */
+        year?: number | null;
+    };
+    url: '/transfers/analysis';
+};
+
+export type RemittanceAnalysisTransfersAnalysisGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RemittanceAnalysisTransfersAnalysisGetError = RemittanceAnalysisTransfersAnalysisGetErrors[keyof RemittanceAnalysisTransfersAnalysisGetErrors];
+
+export type RemittanceAnalysisTransfersAnalysisGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: RemittanceAnalysisResponse;
+};
+
+export type RemittanceAnalysisTransfersAnalysisGetResponse = RemittanceAnalysisTransfersAnalysisGetResponses[keyof RemittanceAnalysisTransfersAnalysisGetResponses];
+
 export type UnlinkTransferTransfersTransferIdDeleteData = {
     body?: never;
     path: {
@@ -13028,6 +13205,36 @@ export type UnlinkTransferTransfersTransferIdDeleteResponses = {
 };
 
 export type UnlinkTransferTransfersTransferIdDeleteResponse = UnlinkTransferTransfersTransferIdDeleteResponses[keyof UnlinkTransferTransfersTransferIdDeleteResponses];
+
+export type CorrectTransferTransfersTransferIdPatchData = {
+    body: TransferCorrection;
+    path: {
+        /**
+         * Transfer Id
+         */
+        transfer_id: string;
+    };
+    query?: never;
+    url: '/transfers/{transfer_id}';
+};
+
+export type CorrectTransferTransfersTransferIdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CorrectTransferTransfersTransferIdPatchError = CorrectTransferTransfersTransferIdPatchErrors[keyof CorrectTransferTransfersTransferIdPatchErrors];
+
+export type CorrectTransferTransfersTransferIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: TransferRow;
+};
+
+export type CorrectTransferTransfersTransferIdPatchResponse = CorrectTransferTransfersTransferIdPatchResponses[keyof CorrectTransferTransfersTransferIdPatchResponses];
 
 export type ReadDashboardDashboardGetData = {
     body?: never;

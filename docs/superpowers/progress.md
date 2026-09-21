@@ -13,9 +13,9 @@ Updated: 21 September 2026.
 | Item | Current state | Evidence |
 | --- | --- | --- |
 | Current outcome | **Phase 4.4 — FX and remittance analysis** | [Phase 4.4 specification](specs/2026-09-21-phase-4-4-fx-remittance-analysis.md) |
-| Outcome state | **Phase 4.4 is specified and plan-reviewed; no implementation branch has started.** Phase 4.8 remains owner-accepted and implementation-complete, and Phase 4.3 remains implementation-complete with owner acceptance open | [Phase 4.4 plan](plans/2026-09-21-phase-4-4-fx-remittance-analysis.md) |
-| Next product action | Implement Phase 4.4 Task 1 — corrections and the analysis API; owner acceptance of Phases 4.1–4.3 on real statements, payslips and holdings | [Phase 4.4 plan](plans/2026-09-21-phase-4-4-fx-remittance-analysis.md) |
-| Current implementation task | Phase 4.4 Task 1 next, after this plan merges | [Phase 4.4 plan](plans/2026-09-21-phase-4-4-fx-remittance-analysis.md) |
+| Outcome state | **Phase 4.4 Task 1 is implemented; Task 2 is next.** Phase 4.8 remains owner-accepted and implementation-complete, and Phase 4.3 remains implementation-complete with owner acceptance open | [Phase 4.4 plan](plans/2026-09-21-phase-4-4-fx-remittance-analysis.md) |
+| Next product action | Implement Phase 4.4 Task 2 — the transfer-panel correction and the Remittances screen; owner acceptance of Phases 4.1–4.3 on real statements, payslips and holdings | [Phase 4.4 plan](plans/2026-09-21-phase-4-4-fx-remittance-analysis.md) |
+| Current implementation task | Phase 4.4 Task 2 next, after Task 1 merges | [Phase 4.4 plan](plans/2026-09-21-phase-4-4-fx-remittance-analysis.md#phase-44-task-2--corrections-and-analysis-on-screen) |
 
 ## Canonical phase status
 
@@ -58,7 +58,7 @@ Updated: 21 September 2026.
 | 4.3 Task 1 — investment analysis API | **Delivered** — [PR #246](https://github.com/sandjaie/OneLedger/pull/246) | [plan](plans/2026-09-16-phase-4-3-investment-analysis.md) |
 | 4.3 Task 2 — investment analysis on the Investments screen | **Delivered** — [PR #247](https://github.com/sandjaie/OneLedger/pull/247) | [plan](plans/2026-09-16-phase-4-3-investment-analysis.md) |
 | 4.4 — FX and remittance analysis | **Specified** | [Phase 4.4 specification](specs/2026-09-21-phase-4-4-fx-remittance-analysis.md) · [Phase 4.4 plan](plans/2026-09-21-phase-4-4-fx-remittance-analysis.md) |
-| 4.4 Task 1 — corrections and the analysis API | **Planned** | [plan](plans/2026-09-21-phase-4-4-fx-remittance-analysis.md) |
+| 4.4 Task 1 — corrections and the analysis API | **Delivered** | [plan](plans/2026-09-21-phase-4-4-fx-remittance-analysis.md) |
 | 4.4 Task 2 — corrections and analysis on screen | **Planned** | [plan](plans/2026-09-21-phase-4-4-fx-remittance-analysis.md) |
 | 4.5 — optional email ingestion | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
 | 4.6 — conditional loan support | **Conditional** — no real loan has been confirmed | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |

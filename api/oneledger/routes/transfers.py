@@ -11,13 +11,19 @@ The scorer is `ingest/transfers.py`, and both candidate routes call it: §6 of
 `transfers-and-reconciliation.html` asks for manual linking "not a second implementation". It
 issues no query, so this module assembles what it cannot ask for — the market rate, the pair
 history and the rule hint — and hands them over as values.
+
+Phase 4.4 adds the two ends `FX_COST` never had (spec `docs/superpowers/specs/
+2026-09-21-phase-4-4-fx-remittance-analysis.md`): `PATCH /transfers/{id}` records the provider
+and the explicit fee no statement itemises, and `GET /transfers/analysis` groups the stored
+figures by corridor, year and provider through the pure `remittance_analysis` module. The fee is
+translated once, here, at the transfer's own date; the analysis re-translates nothing.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import date, timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -29,7 +35,8 @@ from ..auth import OwnerSession, require_owner
 from ..db import connect, scope_to_owner
 from ..ingest.engine import row_captures
 from ..ingest.transfers import Evidence, Leg, band, propose_kind, score_match, stated_remittance
-from ..money import _fixed, _out
+from ..money import _fixed, _out, translate
+from ..remittance_analysis import ProviderGroup, TransferFact, analyse
 from .transactions import (
     COLUMNS,
     FIELDS,
@@ -607,6 +614,330 @@ def create_transfer(
 
         if debit.leg.currency != credit.leg.currency:
             cur.execute(FX_COST, (scorer.market_rate(debit, credit), transfer_id))
+        return _read_transfer(cur, transfer_id, owner.household_id)
+
+
+class ProviderRowOut(BaseModel):
+    provider: str | None
+    transferCount: int
+    sentSource: str
+    costedSentSource: str
+    feesSource: str | None
+    spreadSource: str | None
+    totalCostSource: str | None
+    effectiveCostPct: str | None
+    avgRate: str | None
+    approximateCount: int
+
+
+class CorridorYearOut(BaseModel):
+    year: int
+    totalSentSource: str
+    totalCostedSentSource: str
+    totalFeesSource: str | None
+    totalSpreadSource: str | None
+    totalCostSource: str | None
+    totalEffectiveCostPct: str | None
+    cheapestProvider: str | None
+    potentialSavingsSource: str | None
+    providers: list[ProviderRowOut]
+    unattributed: ProviderRowOut | None
+
+
+class CorridorOut(BaseModel):
+    sourceCurrency: str
+    destinationCurrency: str
+    years: list[CorridorYearOut]
+
+
+class RemittanceAnalysisResponse(BaseModel):
+    corridors: list[CorridorOut]
+
+
+# Same derivation `TRANSFER_COLUMNS` uses for `costIsApproximate`, so one rule decides whether a
+# cost rests on a carried-forward rate (Invariant I7). Unaliased `transfer` on purpose: the
+# correlated subquery names its columns that way.
+_APPROXIMATE = """market_rate IS NOT NULL AND EXISTS (
+        SELECT 1 FROM fx_rate f JOIN household h ON h.id = transfer.household_id
+         WHERE f.rate_date = transfer.transfer_date
+           AND f.quote_currency = h.base_currency
+           AND f.base_currency IN (transfer.source_currency, transfer.destination_currency)
+           AND f.is_carried_forward)"""
+
+_ANALYSIS_SQL = f"""
+    SELECT source_currency, destination_currency, transfer_date, source_amount,
+           destination_amount, implied_rate, fx_spread_cost_source, total_cost_source, provider,
+           {_APPROXIMATE}
+      FROM transfer
+     WHERE household_id = %(household)s
+       AND status = 'confirmed'
+       AND transfer_kind = 'remittance'
+       AND (%(year)s::int IS NULL OR EXTRACT(YEAR FROM transfer_date) = %(year)s::int)
+     ORDER BY transfer_date, id
+"""
+
+
+def _provider_row_out(group: ProviderGroup) -> ProviderRowOut:
+    return ProviderRowOut(
+        provider=group.provider,
+        transferCount=group.transfer_count,
+        sentSource=_out(group.sent_source),
+        costedSentSource=_out(group.costed_sent_source),
+        feesSource=_out(group.fees_source),
+        spreadSource=_out(group.spread_source),
+        totalCostSource=_out(group.total_cost_source),
+        effectiveCostPct=_out(group.effective_cost_pct),
+        avgRate=_out(group.avg_rate),
+        approximateCount=group.approximate_count,
+    )
+
+
+@router.get("/transfers/analysis")
+def remittance_analysis(
+    owner: Annotated[OwnerSession, Depends(require_owner)],
+    year: Annotated[int | None, Query(ge=1900, le=2999)] = None,
+) -> RemittanceAnalysisResponse:
+    """Provider cost, effective rate and the cheapest channel, by corridor and year.
+
+    Read-only, and it reads no `fx_rate` row: every cost figure reported here was frozen on its
+    transfer when the owner confirmed or corrected it (ADR-0002), so a later rate backfill cannot
+    change a past year's stated cost.
+    """
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute("SET TRANSACTION READ ONLY")
+        cur.execute(_ANALYSIS_SQL, {"household": owner.household_id, "year": year})
+        facts = [
+            TransferFact(
+                source_currency=str(row[0]).strip(),
+                destination_currency=str(row[1]).strip(),
+                transfer_date=row[2],
+                source_amount=Decimal(row[3]),
+                destination_amount=Decimal(row[4]),
+                implied_rate=None if row[5] is None else Decimal(row[5]),
+                fx_spread_cost_source=None if row[6] is None else Decimal(row[6]),
+                total_cost_source=None if row[7] is None else Decimal(row[7]),
+                provider=row[8],
+                cost_is_approximate=bool(row[9]),
+            )
+            for row in cur.fetchall()
+        ]
+
+    return RemittanceAnalysisResponse(
+        corridors=[
+            CorridorOut(
+                sourceCurrency=corridor.source_currency,
+                destinationCurrency=corridor.destination_currency,
+                years=[
+                    CorridorYearOut(
+                        year=year_row.year,
+                        totalSentSource=_out(year_row.total_sent_source),
+                        totalCostedSentSource=_out(year_row.total_costed_sent_source),
+                        totalFeesSource=_out(year_row.total_fees_source),
+                        totalSpreadSource=_out(year_row.total_spread_source),
+                        totalCostSource=_out(year_row.total_cost_source),
+                        totalEffectiveCostPct=_out(year_row.total_effective_cost_pct),
+                        cheapestProvider=year_row.cheapest_provider,
+                        potentialSavingsSource=_out(year_row.potential_savings_source),
+                        providers=[_provider_row_out(g) for g in year_row.providers],
+                        unattributed=(
+                            None
+                            if year_row.unattributed is None
+                            else _provider_row_out(year_row.unattributed)
+                        ),
+                    )
+                    for year_row in corridor.years
+                ],
+            )
+            for corridor in analyse(facts)
+        ]
+    )
+
+
+class TransferCorrection(BaseModel):
+    """The two fields no statement states, plus the note. An omitted key leaves the stored value
+    alone; an explicit `null` clears it — told apart by `model_fields_set`, so "clear the fee"
+    and "leave the fee" are different requests rather than the same empty body."""
+
+    provider: str | None = None
+    explicitFeeAmount: str | None = None
+    explicitFeeCurrency: str | None = None
+    notes: str | None = Field(default=None, max_length=500)
+
+
+_PROVIDER_MAX = 80
+_FEE_PLACES = -4  # NUMERIC(20,4): four decimal places, as money stores
+
+
+def _checked_provider(value: str | None) -> str | None:
+    if value is None:
+        return None
+    trimmed = value.strip()
+    # A whitespace-only string is a mistake, not a clear: clearing is an explicit null, so
+    # silently emptying the field here would lose a provider the owner meant to correct.
+    if not trimmed or len(trimmed) > _PROVIDER_MAX:
+        raise HTTPException(
+            status_code=422,
+            detail=f"provider must be 1 to {_PROVIDER_MAX} characters, or null to clear it",
+        )
+    return trimmed
+
+
+def _checked_fee(amount: str | None, currency: str | None) -> tuple[Decimal, str] | None:
+    """The resulting fee after the patch, refusing a half-stated or over-precise one.
+
+    Paired nullness is the ledger's own `original_pair` rule: an amount without its currency is
+    a number with no meaning.
+    """
+    if (amount is None) != (currency is None):
+        raise HTTPException(
+            status_code=422,
+            detail="an explicit fee needs both explicitFeeAmount and explicitFeeCurrency",
+        )
+    if amount is None or currency is None:
+        return None
+    try:
+        parsed = Decimal(amount)
+    except InvalidOperation:
+        raise HTTPException(
+            status_code=422, detail="explicitFeeAmount must be a decimal string"
+        ) from None
+    exponent = parsed.as_tuple().exponent
+    if not isinstance(exponent, int) or exponent < _FEE_PLACES:
+        raise HTTPException(
+            status_code=422,
+            detail="explicitFeeAmount must not have more than four decimal places",
+        )
+    if parsed < 0 or not parsed.is_finite():
+        raise HTTPException(status_code=422, detail="explicitFeeAmount must not be negative")
+    code = currency.strip().upper()
+    if len(code) != 3 or not code.isalpha():
+        raise HTTPException(
+            status_code=422, detail="explicitFeeCurrency must be a three-letter code"
+        )
+    return parsed, code
+
+
+def _fee_in_source(
+    cur: psycopg.Cursor[Any],
+    household_id: UUID,
+    fee: tuple[Decimal, str],
+    source_currency: str,
+    transfer_date: date,
+) -> Decimal:
+    """The fee in the transfer's own currency, at the transfer's own date.
+
+    Translated once, here, and only its effect on `total_cost_source` is stored, so the analysis
+    never re-converts a frozen amount on read (ADR-0002). A date with no rate for the pair is
+    refused rather than translated with a nearby one (Invariant I7).
+    """
+    amount, code = fee
+    if code == source_currency:
+        return amount
+
+    cur.execute(
+        "SELECT base_currency FROM household WHERE id = %s",
+        (household_id,),
+    )
+    found = cur.fetchone()
+    base = str(found[0]).strip() if found else ""
+    cur.execute(
+        """SELECT base_currency, rate FROM fx_rate
+            WHERE quote_currency = %s AND rate_date = %s""",
+        (base, transfer_date),
+    )
+    to_base = {str(row[0]).strip(): Decimal(row[1]) for row in cur.fetchall()}
+    rate = pair_rate(to_base, base, code, source_currency)
+    if rate is None or rate <= 0:
+        raise HTTPException(
+            status_code=422,
+            detail="no exchange rate is held for the fee's currency on the transfer's date",
+        )
+    return translate(amount, rate)
+
+
+_CORRECTABLE_SQL = """
+    SELECT source_currency, transfer_date, fx_spread_cost_source, explicit_fee_amount,
+           explicit_fee_currency
+      FROM transfer
+     WHERE id = %s AND household_id = %s AND status = 'confirmed'
+       AND transfer_kind = 'remittance'
+"""
+
+
+@router.patch("/transfers/{transfer_id}")
+def correct_transfer(
+    transfer_id: UUID,
+    body: TransferCorrection,
+    owner: Annotated[OwnerSession, Depends(require_owner)],
+) -> TransferRow:
+    """Record the provider and the explicit fee for one confirmed remittance.
+
+    Last-write-wins, and it states no expected prior state: `total_cost_source` is recomputed
+    from the stored spread plus the submitted fee, never adjusted by it, so the same correction
+    sent twice stores the same figures. `implied_rate`, `market_rate`, `fx_spread_pct` and
+    `fx_spread_cost_source` stay owned by confirmation-time `FX_COST` and are never written here.
+    """
+    sent = body.model_fields_set
+    with connect() as conn, conn.cursor() as cur:
+        # The same household lock every ledger writer takes, before anything is read for update.
+        cur.execute("SELECT 1 FROM household WHERE id = %s FOR UPDATE", (owner.household_id,))
+        cur.execute(_CORRECTABLE_SQL, (transfer_id, owner.household_id))
+        found = cur.fetchone()
+        # One answer for "no such transfer", "another household's", "not confirmed" and "not a
+        # remittance": telling them apart would tell a caller whether an id they guessed exists.
+        if found is None:
+            raise HTTPException(status_code=404, detail="transfer not found")
+        source_currency, transfer_date, spread, stored_fee, stored_fee_currency = found
+
+        fee_amount = body.explicitFeeAmount if "explicitFeeAmount" in sent else _out(stored_fee)
+        fee_currency = (
+            body.explicitFeeCurrency if "explicitFeeCurrency" in sent else stored_fee_currency
+        )
+        fee = _checked_fee(fee_amount, fee_currency)
+        if fee is not None:
+            # A code this deployment does not hold is refused even when no translation is needed,
+            # so a fee in the source currency cannot smuggle in a currency the ledger never seeded.
+            cur.execute("SELECT 1 FROM currency WHERE code = %s", (fee[1],))
+            if cur.fetchone() is None:
+                raise HTTPException(status_code=422, detail="unknown explicitFeeCurrency")
+        provider = _checked_provider(body.provider) if "provider" in sent else None
+
+        translated = (
+            None
+            if fee is None
+            else _fee_in_source(
+                cur, owner.household_id, fee, str(source_currency).strip(), transfer_date
+            )
+        )
+        # Null only when nothing is known: no spread computed and no fee recorded. Otherwise the
+        # two parts sum, each absent part counting as nothing rather than blanking the total.
+        total_cost = (
+            None
+            if spread is None and translated is None
+            else (Decimal(spread or 0) + (translated or Decimal(0)))
+        )
+
+        assignments = ["total_cost_source = %s", "updated_at = now()"]
+        values: list[Any] = [total_cost]
+        if "provider" in sent:
+            assignments.insert(0, "provider = %s")
+            values.insert(0, provider)
+        if fee is None:
+            assignments.insert(0, "explicit_fee_amount = NULL, explicit_fee_currency = NULL")
+        else:
+            assignments.insert(0, "explicit_fee_amount = %s, explicit_fee_currency = %s")
+            values.insert(0, fee[1])
+            values.insert(0, fee[0])
+        if "notes" in sent:
+            assignments.insert(0, "notes = %s")
+            values.insert(0, body.notes)
+
+        # One statement: every refusal above happens before it, so a rejected correction leaves
+        # provider, fee and cost exactly as they were.
+        cur.execute(
+            f"UPDATE transfer SET {', '.join(assignments)} WHERE id = %s AND household_id = %s",
+            (*values, transfer_id, owner.household_id),
+        )
         return _read_transfer(cur, transfer_id, owner.household_id)
 
 
